@@ -1,0 +1,25 @@
+{
+    "conventionalCommits": {
+      "break": {
+        "release": "major"
+      },
+      "feat": {
+        "release": "minor"
+      },
+      "fix": {
+        "release": "patch"
+      },
+      "refactor": {
+        "release": "none"
+      },
+      "docs": {
+        "release": "none"
+      },
+      "chore": {
+        "release": "none"
+      },
+      "ci": {
+        "release": "none"
+      }
+    }
+}
