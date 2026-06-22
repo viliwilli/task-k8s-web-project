@@ -1,0 +1,47 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: web-content
+  namespace: web
+  labels:
+    app.kubernetes.io/name: web
+data:
+  index.html: |
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <title>Kubernetes GitOps Web App</title>
+      <style>
+        body {
+          font-family: Arial, sans-serif;
+          margin: 40px;
+          background-color: #f5f5f5;
+          color: #222;
+        }
+        .card {
+          background: white;
+          padding: 24px;
+          border-radius: 12px;
+          box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+          max-width: 760px;
+        }
+        h1 {
+          color: #1f6feb;
+        }
+        code {
+          background: #eee;
+          padding: 2px 6px;
+          border-radius: 4px;
+        }
+      </style>
+    </head>
+    <body>
+      <div class="card">
+        <h1>Hello from Kubernetes!</h1>
+        <p>This simple web application is deployed to a local K3s cluster.</p>
+        <p>The deployment is managed using <strong>Argo CD</strong> with a GitOps approach.</p>
+        <p>Repository path: <code>kubernetes/apps/web</code></p>
+      </div>
+    </body>
+    </html>
