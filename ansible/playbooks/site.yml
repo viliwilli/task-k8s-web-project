@@ -7,3 +7,6 @@
 
 - name: Install K3s agents
   ansible.builtin.import_playbook: k3s-agents.yml
+
+- name: Install Argo CD
+  ansible.builtin.import_playbook: argocd.yml

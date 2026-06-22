@@ -1,0 +1,44 @@
+---
+- name: Install Argo CD into the K3s cluster
+  hosts: control
+  become: true
+  gather_facts: false
+
+  tasks:
+    - name: Create Argo CD namespace
+      ansible.builtin.command: >
+        k3s kubectl create namespace {{ argocd_namespace }}
+        --dry-run=client
+        -o yaml
+      register: argocd_namespace_yaml
+      changed_when: false
+
+    - name: Apply Argo CD namespace
+      ansible.builtin.command:
+        cmd: k3s kubectl apply -f -
+        stdin: "{{ argocd_namespace_yaml.stdout }}"
+      changed_when: "'created' in argocd_namespace_apply.stdout or 'configured' in argocd_namespace_apply.stdout"
+      register: argocd_namespace_apply
+
+    - name: Install Argo CD manifests
+      ansible.builtin.command: >
+        k3s kubectl apply
+        -n {{ argocd_namespace }}
+        --server-side
+        --force-conflicts
+        -f {{ argocd_manifest_url }}
+      register: argocd_install_result
+      changed_when: >
+        'created' in argocd_install_result.stdout or
+        'configured' in argocd_install_result.stdout or
+        'serverside-applied' in argocd_install_result.stdout
+
+    - name: Wait for Argo CD pods to be Ready
+      ansible.builtin.command: >
+        k3s kubectl wait
+        --for=condition=Ready
+        pod
+        --all
+        -n {{ argocd_namespace }}
+        --timeout=300s
+      changed_when: false
