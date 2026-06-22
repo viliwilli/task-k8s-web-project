@@ -1,0 +1,27 @@
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: web-application
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: web
+spec:
+  project: default
+
+  source:
+    repoURL: https://github.com/viliwilli/task-k8s-web-project.git
+    targetRevision: main
+    path: kubernetes/apps/web
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: web
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ApplyOutOfSyncOnly=true
