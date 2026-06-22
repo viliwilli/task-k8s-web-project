@@ -1,0 +1,47 @@
+---
+- name: Install K3s server on control node
+  hosts: control
+  become: true
+  gather_facts: true
+
+  tasks:
+    - name: Download K3s install script
+      ansible.builtin.get_url:
+        url: https://get.k3s.io
+        dest: /tmp/install-k3s.sh
+        mode: '0755'
+
+    - name: Install K3s server
+      ansible.builtin.command: /tmp/install-k3s.sh
+      args:
+        creates: /usr/local/bin/k3s
+      environment:
+        INSTALL_K3S_CHANNEL: "{{ k3s_channel }}"
+        INSTALL_K3S_EXEC: >-
+          server
+          --node-ip {{ ansible_host }}
+          --advertise-address {{ ansible_host }}
+          --tls-san {{ ansible_host }}
+          --write-kubeconfig-mode 644
+
+    - name: Wait for K3s node token
+      ansible.builtin.wait_for:
+        path: /var/lib/rancher/k3s/server/node-token
+        timeout: 120
+
+    - name: Read K3s node token
+      ansible.builtin.slurp:
+        src: /var/lib/rancher/k3s/server/node-token
+      register: k3s_node_token
+
+    - name: Store K3s node token as Ansible fact
+      ansible.builtin.set_fact:
+        k3s_token: "{{ k3s_node_token.content | b64decode | trim }}"
+
+    - name: Wait until Kubernetes API is ready
+      ansible.builtin.command: k3s kubectl get nodes
+      register: k3s_nodes_result
+      retries: 20
+      delay: 6
+      until: k3s_nodes_result.rc == 0
+      changed_when: false

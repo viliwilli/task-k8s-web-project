@@ -1,0 +1,24 @@
+---
+- name: Install K3s agents on worker nodes
+  hosts: workers
+  become: true
+  gather_facts: true
+
+  tasks:
+    - name: Download K3s install script
+      ansible.builtin.get_url:
+        url: https://get.k3s.io
+        dest: /tmp/install-k3s.sh
+        mode: '0755'
+
+    - name: Install K3s agent and join cluster
+      ansible.builtin.command: /tmp/install-k3s.sh
+      args:
+        creates: /usr/local/bin/k3s
+      environment:
+        INSTALL_K3S_CHANNEL: "{{ k3s_channel }}"
+        K3S_URL: "https://{{ hostvars[groups['control'][0]].ansible_host }}:6443"
+        K3S_TOKEN: "{{ hostvars[groups['control'][0]].k3s_token }}"
+        INSTALL_K3S_EXEC: >-
+          agent
+          --node-ip {{ ansible_host }}

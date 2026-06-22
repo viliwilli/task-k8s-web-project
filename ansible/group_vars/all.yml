@@ -1,0 +1,5 @@
+---
+# Shared configuration for the local K3s Kubernetes lab.
+
+k3s_server_ip: "192.168.56.10"
+k3s_channel: "stable"
