@@ -1,0 +1,9 @@
+---
+- name: Prepare all VMs
+  ansible.builtin.import_playbook: prepare.yml
+
+- name: Install K3s server
+  ansible.builtin.import_playbook: k3s-server.yml
+
+- name: Install K3s agents
+  ansible.builtin.import_playbook: k3s-agents.yml

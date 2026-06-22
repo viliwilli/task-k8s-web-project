@@ -1,0 +1,50 @@
+# -----------------------------
+# Vagrant / VirtualBox local state
+# -----------------------------
+.vagrant/
+*.box
+
+# -----------------------------
+# Kubernetes local access files
+# -----------------------------
+.kube/
+kubeconfig
+kubeconfig.yaml
+*.kubeconfig
+
+# -----------------------------
+# Ansible local/cache files
+# -----------------------------
+*.retry
+.ansible/
+ansible.log
+facts_cache/
+
+# -----------------------------
+# Python / tooling cache
+# -----------------------------
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+
+# -----------------------------
+# macOS
+# -----------------------------
+.DS_Store
+
+# -----------------------------
+# Editor / IDE
+# -----------------------------
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# -----------------------------
+# Logs / temp files
+# -----------------------------
+*.log
+tmp/
+temp/
