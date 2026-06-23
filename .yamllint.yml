@@ -1,0 +1,28 @@
+# yamllint configuration
+# This file controls which YAML style rules are enforced.
+# yamllint runs in CI on every Pull Request to catch syntax errors early.
+#
+# Full rule reference: https://yamllint.readthedocs.io/en/stable/rules.html
+
+extends: default
+
+rules:
+  # Kubernetes and Ansible files often have long lines (URLs, env vars, etc.)
+  # Set as warning instead of error so the build does not fail on long lines
+  line-length:
+    max: 200
+    level: warning
+
+  # Ansible uses 'yes' / 'no' as valid boolean values in addition to true/false
+  truthy:
+    allowed-values: ['true', 'false', 'yes', 'no']
+    check-keys: false
+
+  # Allow comments starting with one space: # this is fine
+  comments:
+    min-spaces-from-content: 1
+
+  # Not every YAML file needs to start with '---'
+  # Kubernetes manifests always use it; other config files may not
+  document-start:
+    present: false

@@ -1,0 +1,269 @@
+# pr-validate.yml
+#
+# PURPOSE — "Terraform Plan" equivalent
+# --------------------------------------
+# This workflow runs on every Pull Request and validates that all changes are
+# correct BEFORE they get merged into main.
+#
+# Think of it like "terraform plan":
+#   - It does NOT deploy anything
+#   - It checks whether the changes WOULD work if applied
+#   - If any check fails, the PR should not be merged
+#
+# WHAT IT CHECKS
+# --------------
+# 1. yaml-lint      — YAML syntax in ansible/ and kubernetes/ directories
+# 2. ansible-lint   — Ansible playbooks follow best practices
+# 3. k8s-validate   — Kubernetes manifests match the official K8s JSON schemas
+# 4. commit-lint    — Commit messages follow Conventional Commits format
+#                     (types are defined in repo-config.json)
+# 5. summary        — Posts a comment on the PR with a pass/fail table
+#
+# WHEN IT RUNS
+# ------------
+# - When a PR is opened, updated (new commit pushed), or reopened
+# - All 4 check jobs run in parallel to save time
+# - The summary job waits for all checks and posts the result
+#
+# RESULT
+# ------
+# The summary job posts or updates a comment on the PR:
+#
+#   | Check               | Status  |
+#   |---------------------|---------|
+#   | YAML Syntax         | ✅ pass |
+#   | Ansible Lint        | ✅ pass |
+#   | Kubernetes Manifests| ✅ pass |
+#   | Conventional Commits| ✅ pass |
+
+name: PR Validation (Plan)
+
+on:
+  pull_request:
+    branches:
+      - main
+    types:
+      - opened
+      - synchronize
+      - reopened
+
+permissions:
+  # Required to post a comment on the PR
+  pull-requests: write
+  # Required to read repository contents
+  contents: read
+
+jobs:
+
+  # ============================================================
+  # JOB 1: YAML Syntax Check
+  # ============================================================
+  # yamllint reads .yamllint.yml from the repository root for its configuration.
+  # It checks ALL .yml and .yaml files in ansible/ and kubernetes/.
+  # A syntax error in a YAML file causes Kubernetes apply or Ansible to fail,
+  # so we catch it here before it reaches the cluster.
+  yaml-lint:
+    name: YAML Syntax Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install yamllint
+        run: pip install yamllint
+
+      - name: Run yamllint on ansible/ and kubernetes/
+        # The .yamllint.yml config file is picked up automatically
+        run: yamllint ansible/ kubernetes/
+
+  # ============================================================
+  # JOB 2: Ansible Lint
+  # ============================================================
+  # ansible-lint checks Ansible playbooks against best practices.
+  # It catches things like:
+  #   - Using shell commands where an Ansible module exists
+  #   - Missing 'become: true' when root is required
+  #   - Deprecated syntax
+  # Configuration is in .ansible-lint at the repository root.
+  ansible-lint:
+    name: Ansible Lint
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install ansible-lint
+        run: pip install ansible-lint
+
+      - name: Run ansible-lint on playbooks
+        # Run from repo root so .ansible-lint config is found automatically
+        run: ansible-lint ansible/playbooks/
+
+  # ============================================================
+  # JOB 3: Kubernetes Manifest Validation
+  # ============================================================
+  # kubeconform validates Kubernetes YAML files against the official
+  # Kubernetes JSON schemas WITHOUT needing a running cluster.
+  # This catches typos in field names, wrong API versions, missing
+  # required fields, etc.
+  #
+  # --ignore-missing-schemas: skip CRDs like the ArgoCD Application
+  # which have no schema in the standard k8s catalog
+  # --strict: disallow additional unknown fields
+  k8s-validate:
+    name: Kubernetes Manifest Validation
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install kubeconform
+        run: |
+          # Download the latest kubeconform binary for Linux amd64
+          VERSION=$(curl -sL https://api.github.com/repos/yannh/kubeconform/releases/latest \
+            | grep '"tag_name"' | cut -d'"' -f4)
+          wget -q "https://github.com/yannh/kubeconform/releases/download/${VERSION}/kubeconform-linux-amd64.tar.gz"
+          tar xf kubeconform-linux-amd64.tar.gz
+          sudo mv kubeconform /usr/local/bin/
+          kubeconform -v
+
+      - name: Validate Kubernetes manifests
+        run: |
+          echo "=== Validating kubernetes/apps/web/ ==="
+          kubeconform \
+            -strict \
+            -summary \
+            -output text \
+            -ignore-missing-schemas \
+            kubernetes/apps/web/*.yaml
+
+          echo ""
+          echo "=== Validating kubernetes/argocd/ ==="
+          kubeconform \
+            -strict \
+            -summary \
+            -output text \
+            -ignore-missing-schemas \
+            kubernetes/argocd/*.yaml
+
+  # ============================================================
+  # JOB 4: Conventional Commits Check
+  # ============================================================
+  # Reads the allowed commit types from repo-config.json and validates
+  # every commit in this PR against the Conventional Commits format.
+  #
+  # Valid format:  type(scope): description
+  # Examples:      feat: add web deployment
+  #                fix(ingress): correct hostname
+  #                docs: update README
+  #
+  # The allowed types (feat, fix, docs, etc.) come from repo-config.json.
+  # Merge commits are automatically skipped.
+  commit-lint:
+    name: Conventional Commits Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code with full history
+        uses: actions/checkout@v4
+        with:
+          # Fetch all commits so we can compare against main
+          fetch-depth: 0
+
+      - name: Install jq (needed by check-commits.sh)
+        run: sudo apt-get install -y jq
+
+      - name: Make check-commits.sh executable
+        run: chmod +x scripts/check-commits.sh
+
+      - name: Validate commit messages against repo-config.json
+        run: |
+          # Get all commit SUBJECTS (first line of commit message) in this PR
+          # origin/main..HEAD = commits that are in this branch but not in main
+          git log origin/main..HEAD --format="%s" | ./scripts/check-commits.sh
+
+  # ============================================================
+  # JOB 5: Post PR Comment with Summary
+  # ============================================================
+  # This job always runs (even if other jobs fail) and posts a
+  # formatted summary table as a comment on the PR.
+  # If the comment already exists (from a previous push), it is updated.
+  summary:
+    name: Post Validation Summary
+    runs-on: ubuntu-latest
+    # Wait for all check jobs before posting the summary
+    needs: [yaml-lint, ansible-lint, k8s-validate, commit-lint]
+    # Run even if some checks failed so we always post a summary
+    if: always()
+
+    steps:
+      - name: Post or update PR comment with results
+        uses: actions/github-script@v7
+        with:
+          script: |
+            // Read the result of each job from the needs context
+            const results = {
+              yaml:    '${{ needs.yaml-lint.result }}',
+              ansible: '${{ needs.ansible-lint.result }}',
+              k8s:     '${{ needs.k8s-validate.result }}',
+              commits: '${{ needs.commit-lint.result }}',
+            };
+
+            // Helper: convert job result to an emoji + text label
+            const badge = (r) => {
+              if (r === 'success')  return '✅ passed';
+              if (r === 'failure')  return '❌ failed';
+              if (r === 'skipped')  return '⏭️ skipped';
+              return '⚠️ ' + r;
+            };
+
+            const allPassed = Object.values(results).every(r => r === 'success');
+
+            const body = [
+              '## 🔍 PR Validation Summary (Plan)',
+              '',
+              '| Check | Status |',
+              '|-------|--------|',
+              `| YAML Syntax | ${badge(results.yaml)} |`,
+              `| Ansible Lint | ${badge(results.ansible)} |`,
+              `| Kubernetes Manifests | ${badge(results.k8s)} |`,
+              `| Conventional Commits | ${badge(results.commits)} |`,
+              '',
+              allPassed
+                ? '✅ **All checks passed.** This PR is ready to review and merge.'
+                : '❌ **Some checks failed.** Fix the issues above before merging.',
+              '',
+              '---',
+              '*After merging to `main`, Argo CD will automatically detect the change',
+              'and synchronise the Kubernetes cluster with the new desired state.*',
+            ].join('\n');
+
+            // Find an existing summary comment to update, or create a new one
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo:  context.repo.repo,
+              issue_number: context.issue.number,
+            });
+
+            const existing = comments.find(c =>
+              c.body.includes('🔍 PR Validation Summary')
+            );
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner:      context.repo.owner,
+                repo:       context.repo.repo,
+                comment_id: existing.id,
+                body:       body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner:        context.repo.owner,
+                repo:         context.repo.repo,
+                issue_number: context.issue.number,
+                body:         body,
+              });
+            }

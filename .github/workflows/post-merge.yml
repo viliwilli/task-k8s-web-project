@@ -1,0 +1,184 @@
+# post-merge.yml
+#
+# PURPOSE — "Terraform Apply" equivalent
+# ----------------------------------------
+# This workflow runs every time a commit lands on the main branch
+# (i.e. after a Pull Request is merged).
+#
+# Think of it like "terraform apply":
+#   - The changes are now the "live" desired state in Git
+#   - Argo CD will detect the change and sync the Kubernetes cluster
+#   - This workflow validates that the merged state is still clean,
+#     then posts a deployment summary so you know what was applied
+#
+# WHAT IT DOES
+# ------------
+# 1. Runs the same validation jobs as pr-validate.yml
+# 2. Generates a deployment summary visible in the Actions UI
+#    (Go to Actions → the run → Summary tab to see it)
+# 3. Shows exactly which Kubernetes resources are now the desired state
+#
+# HOW ARGO CD APPLIES THE CHANGES
+# --------------------------------
+# After this workflow finishes, Argo CD (running inside your local cluster)
+# polls the GitHub repository every 3 minutes by default.
+# When it detects a change on main, it applies the manifests automatically:
+#
+#   Git change on main
+#     → Argo CD detects change (within ~3 min)
+#     → Argo CD runs: kubectl apply -f kubernetes/apps/web/
+#     → Kubernetes updates the running pods
+#     → web-application shows: Synced + Healthy
+#
+# You can also force an immediate sync:
+#   kubectl annotate application web-application \
+#     argocd.argoproj.io/refresh=normal -n argocd
+#
+# Or via the Argo CD UI at: https://localhost:8080 (after port-forward)
+
+name: Post-Merge Summary (Apply)
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+
+  # ============================================================
+  # JOB 1: YAML Syntax Check
+  # ============================================================
+  yaml-lint:
+    name: YAML Syntax Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install yamllint
+        run: pip install yamllint
+
+      - name: Run yamllint
+        run: yamllint ansible/ kubernetes/
+
+  # ============================================================
+  # JOB 2: Ansible Lint
+  # ============================================================
+  ansible-lint:
+    name: Ansible Lint
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install ansible-lint
+        run: pip install ansible-lint
+
+      - name: Run ansible-lint
+        run: ansible-lint ansible/playbooks/
+
+  # ============================================================
+  # JOB 3: Kubernetes Manifest Validation
+  # ============================================================
+  k8s-validate:
+    name: Kubernetes Manifest Validation
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install kubeconform
+        run: |
+          VERSION=$(curl -sL https://api.github.com/repos/yannh/kubeconform/releases/latest \
+            | grep '"tag_name"' | cut -d'"' -f4)
+          wget -q "https://github.com/yannh/kubeconform/releases/download/${VERSION}/kubeconform-linux-amd64.tar.gz"
+          tar xf kubeconform-linux-amd64.tar.gz
+          sudo mv kubeconform /usr/local/bin/
+
+      - name: Validate Kubernetes manifests
+        run: |
+          kubeconform -strict -summary -output text -ignore-missing-schemas \
+            kubernetes/apps/web/*.yaml kubernetes/argocd/*.yaml
+
+  # ============================================================
+  # JOB 4: Deployment Summary
+  # ============================================================
+  # Generates a deployment summary shown in the Actions UI.
+  # Navigate to: Actions → this run → Summary tab
+  deployment-summary:
+    name: Deployment Summary
+    runs-on: ubuntu-latest
+    needs: [yaml-lint, ansible-lint, k8s-validate]
+    if: always()
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Generate deployment summary
+        run: |
+          # Write to $GITHUB_STEP_SUMMARY — this appears in the Actions UI
+          # as a nicely formatted page under the "Summary" tab of the run.
+
+          cat >> "$GITHUB_STEP_SUMMARY" <<'SUMMARY'
+          ## 🚀 Deployment Summary (Apply)
+
+          Changes have been merged to `main`. Argo CD will sync the cluster automatically.
+
+          ### Validation Results
+
+          SUMMARY
+
+          # Report each job result
+          YAML_RESULT="${{ needs.yaml-lint.result }}"
+          ANSIBLE_RESULT="${{ needs.ansible-lint.result }}"
+          K8S_RESULT="${{ needs.k8s-validate.result }}"
+
+          badge() {
+            [ "$1" = "success" ] && echo "✅ passed" || echo "❌ failed"
+          }
+
+          cat >> "$GITHUB_STEP_SUMMARY" <<RESULTS
+          | Check | Status |
+          |-------|--------|
+          | YAML Syntax | $(badge "${YAML_RESULT}") |
+          | Ansible Lint | $(badge "${ANSIBLE_RESULT}") |
+          | Kubernetes Manifests | $(badge "${K8S_RESULT}") |
+
+          RESULTS
+
+          # Show the current desired state in Git
+          echo "### Kubernetes Resources (current desired state in Git)" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          find kubernetes/apps/web kubernetes/argocd -name "*.yaml" | sort | while read -r f; do
+            echo "--- ${f}"
+            grep -E "^kind:|^  name:|^  namespace:" "${f}" | head -5
+            echo ""
+          done >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+          # Show commit that triggered this run
+          cat >> "$GITHUB_STEP_SUMMARY" <<COMMIT
+
+          ### Merged commit
+
+          - **SHA**: ${{ github.sha }}
+          - **Author**: ${{ github.actor }}
+          - **Run**: [${{ github.run_id }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
+
+          ### Next steps
+
+          1. The cluster must be running locally (`vagrant up`)
+          2. Argo CD detects changes on `main` every ~3 minutes automatically
+          3. Force immediate sync: `kubectl annotate application web-application argocd.argoproj.io/refresh=normal -n argocd`
+          4. Verify: `kubectl get application web-application -n argocd -o wide`
+          COMMIT

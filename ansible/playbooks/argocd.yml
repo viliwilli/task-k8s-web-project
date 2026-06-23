@@ -1,4 +1,3 @@
----
 - name: Install Argo CD into the K3s cluster
   hosts: control
   become: true
