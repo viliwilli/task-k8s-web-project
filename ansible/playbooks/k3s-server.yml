@@ -22,6 +22,7 @@
           --node-ip {{ ansible_host }}
           --advertise-address {{ ansible_host }}
           --tls-san {{ ansible_host }}
+          --flannel-iface {{ k3s_flannel_iface }}
           --write-kubeconfig-mode 644
 
     - name: Wait for K3s node token

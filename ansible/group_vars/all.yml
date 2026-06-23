@@ -4,6 +4,13 @@
 k3s_server_ip: "192.168.56.10"
 k3s_channel: "stable"
 
+# VirtualBox creates two network interfaces:
+# - eth0 = NAT network, same 10.0.2.15 IP on all VMs
+# - eth1 = host-only network, unique 192.168.56.x IP per VM
+#
+# K3s/Flannel must use eth1 for reliable multi-node pod networking
+k3s_flannel_iface: "eth1"
+
 argocd_namespace: "argocd"
 argocd_version: "v3.4.4"
 argocd_manifest_url: "https://raw.githubusercontent.com/argoproj/argo-cd/{{ argocd_version }}/manifests/install.yaml"
