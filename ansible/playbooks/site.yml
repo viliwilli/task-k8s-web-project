@@ -1,4 +1,3 @@
----
 - name: Prepare all VMs
   ansible.builtin.import_playbook: prepare.yml
 

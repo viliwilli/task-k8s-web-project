@@ -1,0 +1,22 @@
+# ansible-lint configuration
+# ansible-lint checks Ansible playbooks for best practices and potential bugs.
+# It runs in CI on every Pull Request.
+#
+# Full configuration reference: https://ansible.readthedocs.io/projects/lint/configuring/
+
+# 'basic' profile checks the most important rules without being overly strict
+profile: basic
+
+# Do not lint these paths
+exclude_paths:
+  - .git/
+  - .vagrant/
+
+# These rules are warnings, not errors (they will not fail the CI check)
+warn_list:
+  - yaml[truthy]
+  - name[casing]
+  - no-changed-when
+
+# Quiet output: only show violations, not every file being scanned
+quiet: false

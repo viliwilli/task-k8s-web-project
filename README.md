@@ -214,27 +214,77 @@ These files are local only and should not be committed to Git.
 
 ## Prerequisites
 
-This setup was tested on Apple Silicon macOS.
+This lab runs on macOS, Linux, and Windows (via WSL). Choose your platform below.
 
-Install the required tools:
+### macOS (Intel or Apple Silicon)
 
 ```bash
-brew tap hashicorp/tap
-brew trust hashicorp/tap
-brew install hashicorp/tap/hashicorp-vagrant
+# Install Homebrew package manager if you do not have it
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
 
+# Install Vagrant, Ansible, kubectl, and Argo CD CLI
+brew tap hashicorp/tap
+brew install hashicorp/tap/hashicorp-vagrant
 brew install ansible kubectl argocd
 ```
 
-You also need VirtualBox installed.
+Install VirtualBox from the official website: https://www.virtualbox.org/wiki/Downloads
 
-On Apple Silicon Mac, run this VirtualBox workaround once:
+On Apple Silicon Mac, run this VirtualBox workaround once before starting VMs:
 
 ```bash
 VBoxManage setextradata global "VBoxInternal/Devices/pcbios/0/Config/DebugLevel"
 ```
 
-Check installed versions:
+### Linux (Ubuntu / Debian)
+
+```bash
+# Ansible
+sudo apt update
+sudo apt install -y ansible
+
+# kubectl
+curl -LO "https://dl.k8s.io/release/$(curl -Ls https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+sudo install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
+
+# Argo CD CLI
+VERSION=$(curl -Ls https://raw.githubusercontent.com/argoproj/argo-cd/stable/VERSION)
+curl -sSL -o /usr/local/bin/argocd \
+  "https://github.com/argoproj/argo-cd/releases/download/v${VERSION}/argocd-linux-amd64"
+sudo chmod +x /usr/local/bin/argocd
+
+# Vagrant — download the .deb from HashiCorp
+wget -O /tmp/vagrant.deb https://releases.hashicorp.com/vagrant/2.4.3/vagrant_2.4.3-1_amd64.deb
+sudo dpkg -i /tmp/vagrant.deb
+```
+
+Install VirtualBox: `sudo apt install -y virtualbox`
+
+### Windows (via WSL)
+
+Ansible does not run natively on Windows. The recommended approach is to use
+**WSL (Windows Subsystem for Linux)** which gives you a full Linux environment.
+
+```powershell
+# In PowerShell (as Administrator)
+wsl --install
+# Then restart your computer and open the Ubuntu app from the Start menu
+```
+
+Inside the WSL Ubuntu terminal, follow the Linux instructions above.
+
+Install VirtualBox for Windows from: https://www.virtualbox.org/wiki/Downloads
+
+VirtualBox is installed on Windows (not inside WSL). Vagrant running inside WSL
+can control the Windows VirtualBox via the environment variable:
+
+```bash
+# Add to ~/.bashrc inside WSL
+export VAGRANT_WSL_ENABLE_WINDOWS_ACCESS="1"
+export PATH="$PATH:/mnt/c/Program Files/Oracle/VirtualBox"
+```
+
+### Verify installed tools (all platforms)
 
 ```bash
 vagrant --version
@@ -792,6 +842,240 @@ rm -rf .kube/
 
 ---
 
+## Makefile shortcuts
+
+Instead of running individual commands manually, use `make`:
+
+```bash
+make help        # show all available targets
+make up          # start VMs (vagrant up)
+make ping        # test Ansible SSH connectivity
+make setup       # run full Ansible provisioning (K3s + Argo CD)
+make kubeconfig  # fetch kubeconfig from control node
+make bootstrap   # apply the Argo CD Application manifest
+make status      # show nodes, Argo CD status, web namespace
+make web-test    # curl the web application and check the response
+make argocd-ui   # port-forward Argo CD UI to https://localhost:8080
+make down        # stop VMs without deleting them
+make clean       # destroy all VMs
+make lint        # run yamllint + ansible-lint locally
+```
+
+Quick start using only Make:
+
+```bash
+make up
+make ping
+make setup
+make kubeconfig
+make bootstrap
+make status
+make web-test
+```
+
+---
+
+## GitHub Actions CI/CD workflows
+
+This repository contains three automated workflows in `.github/workflows/`.
+They run automatically on GitHub — you do not need to trigger them manually.
+
+### What is a GitHub Actions workflow?
+
+A workflow is a YAML file that describes a sequence of steps to run in the
+cloud (on GitHub's servers). Every time you push code or open a Pull Request,
+GitHub runs the relevant workflows automatically.
+
+Think of them as a robot that checks your code before it reaches production.
+
+---
+
+### auto-pr.yml — Automatic Draft Pull Request
+
+**When it runs:** When you push a new branch to GitHub.
+
+**What it does:**
+Automatically creates a Draft Pull Request for your branch. You no longer
+need to go to GitHub and click "Compare & pull request" manually.
+
+```
+git push -u origin Jira-ticket-010
+    ↓
+auto-pr.yml triggers
+    ↓
+Draft PR created: "Jira Ticket 010"
+    ↓
+pr-validate.yml triggers automatically on the new PR
+```
+
+A Draft PR:
+- Shows up in the PR list (visible to reviewers)
+- Runs CI checks immediately
+- Cannot be accidentally merged (must be marked "Ready for review" first)
+
+---
+
+### pr-validate.yml — Pull Request Validation (Plan)
+
+**When it runs:** Every time a Pull Request to `main` is opened or updated.
+
+**What it does:**
+Runs 4 checks in parallel to verify the changes are correct BEFORE merge.
+Think of it like `terraform plan` — it shows what would happen without
+actually changing anything.
+
+| Check | What it validates |
+|-------|------------------|
+| YAML Syntax | All `.yml`/`.yaml` files have valid YAML syntax |
+| Ansible Lint | Ansible playbooks follow best practices |
+| Kubernetes Manifests | K8s YAML matches the official Kubernetes schemas |
+| Conventional Commits | Commit messages follow the format in `repo-config.json` |
+
+After all checks finish, the workflow posts a summary comment on the PR:
+
+```
+## 🔍 PR Validation Summary (Plan)
+
+| Check                | Status     |
+|----------------------|------------|
+| YAML Syntax          | ✅ passed  |
+| Ansible Lint         | ✅ passed  |
+| Kubernetes Manifests | ✅ passed  |
+| Conventional Commits | ✅ passed  |
+```
+
+If any check fails, fix the issue and push again — the comment will update.
+
+---
+
+### post-merge.yml — Post-Merge Summary (Apply)
+
+**When it runs:** Every time a commit lands on `main` (i.e. after PR merge).
+
+**What it does:**
+Runs the same validations again on the merged state, then generates a
+deployment summary in the Actions UI. Think of it like `terraform apply` —
+it confirms the new desired state is valid and shows what Argo CD will sync.
+
+**Where to see the summary:**
+GitHub → Actions tab → select the run → Summary tab
+
+After this workflow passes, Argo CD detects the change on `main` (within ~3 minutes)
+and synchronises the Kubernetes cluster automatically.
+
+---
+
+## Conventional Commits
+
+All commit messages in this repository must follow the
+[Conventional Commits](https://www.conventionalcommits.org/) format.
+
+The allowed types are defined in `repo-config.json`:
+
+```
+type(optional-scope): short description
+```
+
+Examples:
+
+```bash
+feat: add nginx deployment manifest
+fix(ingress): correct hostname from web to web.local
+docs: update README with Linux prerequisites
+refactor(ansible): split prepare playbook into separate tasks
+chore: bump ArgoCD version to v3.4.4
+ci: add yamllint to PR validation workflow
+break: remove support for single-node cluster
+```
+
+### Why conventional commits?
+
+- The Git history becomes machine-readable and easy to search
+- Each commit type signals the kind of change (`feat` = new thing, `fix` = bug)
+- Automated changelogs can be generated from the commit history
+- Code reviewers immediately understand the scope and intent of a change
+
+### How the type affects releases (from `repo-config.json`)
+
+| Type | Meaning | Release impact |
+|------|---------|----------------|
+| `feat` | New feature | minor version bump |
+| `fix` | Bug fix | patch version bump |
+| `break` | Breaking change | major version bump |
+| `refactor` | Code restructure | no release |
+| `docs` | Documentation only | no release |
+| `chore` | Maintenance | no release |
+| `ci` | CI/CD pipeline | no release |
+
+### Fixing a bad commit message
+
+If you forgot the conventional format, fix it before pushing:
+
+```bash
+# Fix the last commit message
+git commit --amend -m "feat: add Argo CD application manifest"
+
+# Fix an older commit (interactive rebase)
+git rebase -i origin/main
+# Change 'pick' to 'reword' next to the commit you want to fix
+```
+
+### Checking commit messages locally
+
+```bash
+# Check all commits in your branch vs main
+git log origin/main..HEAD --format="%s" | ./scripts/check-commits.sh
+```
+
+---
+
+## Branch protection and CODEOWNERS
+
+### What is branch protection?
+
+Branch protection is a GitHub setting that prevents direct commits to `main`.
+Every change must go through a Pull Request and receive an approval before
+merging. This enforces code review and ensures CI checks always run.
+
+### How to enable branch protection on your repository
+
+1. Go to your repository on GitHub
+2. Click **Settings** → **Branches**
+3. Click **Add branch protection rule**
+4. Set **Branch name pattern** to `main`
+5. Enable these options:
+   - ✅ **Require a pull request before merging**
+   - ✅ **Require approvals** (set minimum to 1)
+   - ✅ **Require review from Code Owners**
+   - ✅ **Require status checks to pass before merging**
+     - Add: `YAML Syntax Check`
+     - Add: `Ansible Lint`
+     - Add: `Kubernetes Manifest Validation`
+     - Add: `Conventional Commits Check`
+   - ✅ **Do not allow bypassing the above settings**
+6. Click **Save changes**
+
+After this is set up, nobody (not even the repository owner) can push directly
+to `main`. Every change requires a PR.
+
+### What is CODEOWNERS?
+
+The `CODEOWNERS` file defines who must review changes before they can be merged.
+
+This repository has:
+
+```
+* @viliwilli @vcillik
+```
+
+This means: for every file in the repository, GitHub will request a review from
+`@viliwilli` or `@vcillik` before the PR can be merged.
+
+The "Require review from Code Owners" branch protection rule (step 5 above)
+is what actually enforces this requirement.
+
+---
+
 ## Summary
 
 This project demonstrates a complete local DevOps workflow:
@@ -802,6 +1086,7 @@ Ansible configures the machines.
 K3s runs Kubernetes.
 Argo CD manages the application using GitOps.
 Kubernetes runs and exposes the web application.
+GitHub Actions validates every change before it reaches main.
 ```
 
 The desired application state is stored in Git, and Argo CD keeps the Kubernetes cluster synchronized with that state.

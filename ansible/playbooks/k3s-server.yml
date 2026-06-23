@@ -1,4 +1,3 @@
----
 - name: Install K3s server on control node
   hosts: control
   become: true
