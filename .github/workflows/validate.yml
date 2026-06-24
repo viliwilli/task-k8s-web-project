@@ -1,0 +1,63 @@
+---
+# validate.yml — Reusable validation workflow
+#
+# This is a REUSABLE workflow, not triggered directly.
+# It is called by pr-validate.yml and post-merge.yml to avoid duplicating
+# the same validation logic in two places.
+#
+# Best practice: define validation once, reuse everywhere.
+# If you add a new check here, both PR and post-merge automatically get it.
+
+name: Validate
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+
+  yaml-lint:
+    name: YAML Syntax
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install yamllint
+        run: pip install --quiet yamllint
+
+      - name: Run yamllint
+        run: yamllint ansible/ kubernetes/
+
+  ansible-lint:
+    name: Ansible Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install ansible-lint
+        run: pip install --quiet ansible-lint
+
+      - name: Run ansible-lint
+        run: ansible-lint ansible/playbooks/
+
+  k8s-validate:
+    name: Kubernetes Manifests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install kubeconform
+        run: |
+          VERSION=$(curl -sL https://api.github.com/repos/yannh/kubeconform/releases/latest \
+            | grep '"tag_name"' | cut -d'"' -f4)
+          wget -q "https://github.com/yannh/kubeconform/releases/download/${VERSION}/kubeconform-linux-amd64.tar.gz"
+          tar xf kubeconform-linux-amd64.tar.gz
+          sudo mv kubeconform /usr/local/bin/
+
+      - name: Validate manifests
+        run: |
+          kubeconform -strict -summary -ignore-missing-schemas \
+            kubernetes/apps/web/*.yaml \
+            kubernetes/argocd/*.yaml

@@ -1,86 +1,247 @@
-# task-k8s-web-project
-Deploy and Manage a Kubernetes Cluster Using IaC Tools with GitOps Approach <br>
-
-You are tasked with deploying a set of VMs, setting up a Kubernetes cluster on these VMs, and <br>
-deploying a simple web application. The application should be accessible via a DNS record. You <br>
-should use a GitOps approach to manage the configuration and deployment. <br>
-
 # Kubernetes GitOps Web Project
 
-This repository contains a local DevOps lab that deploys a multi-node Kubernetes cluster on virtual machines and manages a simple web application using a GitOps approach.
+A local DevOps lab that provisions virtual machines, installs a Kubernetes cluster, and
+deploys a simple web application — all managed through Git using a GitOps approach.
 
-The solution is designed and tested on:
-
-* macOS
-* Apple Silicon MacBook Air M4
-* VirtualBox
-* Vagrant
-* Ansible
-* K3s Kubernetes
-* Argo CD
-
-The goal of this project is to demonstrate how to:
-
-1. Provision multiple virtual machines using Infrastructure as Code.
-2. Configure a Kubernetes cluster on those virtual machines.
-3. Deploy a simple web application to Kubernetes.
-4. Manage the application deployment using GitOps with Argo CD.
+**What you will see at the end:**
+Open a browser and go to `http://web.local` — a web page served from inside a real
+Kubernetes cluster running on your laptop.
 
 ---
 
-## High-level architecture
+## What is this project and why does it exist?
+
+This project is a Senior DevOps interview task. The goal is to demonstrate how modern
+infrastructure is built, deployed, and managed in a professional environment.
+
+Every tool used here is industry-standard. You will find Vagrant, Ansible, Kubernetes,
+and Argo CD in real companies every day.
+
+---
+
+## Requirements and deliverables
+
+### 4 requirements (all met)
+
+| # | Requirement | Implemented by |
+|---|-------------|---------------|
+| 1 | Deploy minimum 3 VMs using an IaC tool — fully automated, reproducible | `Vagrantfile` — `vagrant up` creates all 3 VMs from scratch |
+| 2 | Install and configure a Kubernetes cluster on the VMs | `ansible/playbooks/` — K3s installed via Ansible across all nodes |
+| 3 | Deploy a simple web application (single HTML page, Nginx) | `kubernetes/apps/web/` — Nginx + ConfigMap + Service + Ingress |
+| 4 | Use a GitOps tool (Argo CD / Flux) — Git repo reflects cluster state | `kubernetes/argocd/web-application.yaml` — Argo CD auto-syncs on every merge |
+
+### 5 deliverables (all present)
+
+| Deliverable | File(s) |
+|-------------|---------|
+| IaC scripts | `Vagrantfile` |
+| Ansible playbooks | `ansible/playbooks/` (prepare, k3s-server, k3s-agents, argocd) |
+| Kubernetes manifests | `kubernetes/apps/web/` (namespace, configmap, deployment, service, ingress) |
+| GitOps configuration | `kubernetes/argocd/web-application.yaml` |
+| Documentation | `README.md` (this file) |
+
+### 4 evaluation criteria
+
+| Criterion | How this project meets it |
+|-----------|--------------------------|
+| **Correctness** | All components work together end-to-end: `make up && make setup && make bootstrap` → `http://web.local` shows the page |
+| **Efficiency** | K3s (lightweight Kubernetes), resource limits on pods, non-root Nginx, idempotent Ansible tasks |
+| **Clarity** | Every file has comments explaining what it does and why; README covers every step |
+| **Scalability** | Adding a worker node = one new entry in `NODES` (Vagrantfile) and `inventory.ini`; see [Scaling the cluster](#scaling-the-cluster) |
+
+---
+
+## ELI5 — Explain it like I am 6 years old
+
+This section explains every tool as simply as possible.
+If you already know a tool, skip its section.
+
+### What is VirtualBox?
+
+Imagine you have a real computer (your MacBook or laptop).
+VirtualBox lets you create **fake computers inside your real computer** — like running
+a computer simulation. Each fake computer acts like a real one: it has its own operating
+system, files, and network. You can start it, stop it, and delete it.
+
+In this project we create **three fake computers** to simulate a real server environment.
+
+### What is Vagrant?
+
+Creating fake computers in VirtualBox by clicking buttons is slow and error-prone.
+**Vagrant is a recipe book for VirtualBox.** You write a file called `Vagrantfile`
+that says: *"create three computers with Ubuntu, each with 2GB RAM and a fixed IP address."*
+Then you run `vagrant up` and Vagrant reads the recipe and does everything automatically.
+
+This means anyone can recreate the exact same environment on any laptop just by running
+one command.
+
+### What is Ansible?
+
+After Vagrant creates the fake computers, they are empty — just a fresh Ubuntu install.
+**Ansible is a remote control for computers.** You write a list of tasks in a YAML file
+(called a *playbook*) like: *"install curl, disable swap, install Kubernetes"*, and Ansible
+connects to all three computers over SSH and runs those tasks automatically.
+
+No need to log in to each computer and type commands manually.
+
+### What is Kubernetes?
+
+Imagine you have an app and you want to run it. You could just start it on one server — but
+what if that server crashes? Your app is down. What if millions of people visit at once?
+One server is not enough.
+
+**Kubernetes is a manager for your apps.** It:
+- Runs multiple copies of your app (so if one crashes, others keep working)
+- Restarts crashed apps automatically
+- Spreads traffic across copies
+- Lets you update apps without downtime
+
+Instead of telling Kubernetes *"do this"*, you tell it *"I want 2 copies of my app running"*.
+Kubernetes figures out how to make that happen and keeps it that way.
+
+### What is K3s?
+
+The full version of Kubernetes is powerful but needs a lot of computer resources.
+**K3s is a lightweight Kubernetes** — it does the same job but uses much less RAM and CPU.
+It is made for local labs, small servers, and edge devices.
+
+In this project we use K3s because our fake computers only have 2GB RAM each.
+K3s is a certified Kubernetes distribution — everything you learn on K3s works on full Kubernetes.
+
+### What is Argo CD?
+
+You have Kubernetes running. How do you deploy your app?
+One way: run `kubectl apply -f app.yaml` manually every time you change something.
+This is error-prone — what if you forget? What if someone else changed the cluster directly?
+
+**Argo CD is a robot that watches your Git repository.** When something in the
+`kubernetes/apps/web/` folder changes on the `main` branch, Argo CD automatically
+applies those changes to the cluster. The cluster always reflects what is in Git.
+
+You never deploy manually. You push to Git, Argo CD does the rest.
+
+### What is GitOps?
+
+**GitOps is a way of working where Git is the only source of truth.**
+
+Traditional approach:
+- Developer runs `kubectl apply` → cluster changes
+- Nobody knows what changed, or who did it, or when
+
+GitOps approach:
+- Developer commits to Git → Argo CD detects the change → cluster updates
+- Full history in Git, code review before changes, automatic sync
+
+The cluster should always look exactly like what is in the Git repository.
+If someone changes the cluster directly (without Git), Argo CD resets it back.
+
+### What is Traefik?
+
+When a request comes to your cluster from a browser, something needs to decide:
+*"which app should receive this request?"*
+
+**Traefik is a reverse proxy and traffic router.** It reads the hostname of the request
+(`web.local`) and forwards it to the correct Kubernetes Service.
+
+K3s includes Traefik by default — you do not need to install it separately.
+
+### What is an Ingress?
+
+An **Ingress is a routing rule** that tells Traefik what to do with incoming requests.
+In this project the Ingress says: *"requests with hostname `web.local` → send to Service `web`"*.
+
+### What is a ConfigMap?
+
+A **ConfigMap is a storage box for plain text** inside Kubernetes.
+In this project it stores the `index.html` file content. The Nginx pods mount it as a file.
+
+This means you can change the web page by editing the ConfigMap in Git —
+no need to rebuild a Docker image.
+
+### What is a Deployment?
+
+A **Deployment is the instruction for running your app.** It says:
+*"run 2 copies of this Nginx container, restart them if they crash, here is the Docker image to use."*
+
+Kubernetes reads the Deployment and makes it happen.
+
+### What is a Service?
+
+Pods (containers) have temporary IP addresses — they can change when pods restart.
+A **Service is a permanent, stable address** inside the cluster.
+Other things inside the cluster can always reach your app via the Service name, even if pods restart.
+
+### What is a Namespace?
+
+A **Namespace is a folder inside Kubernetes** to keep things organized.
+All web app resources live in the `web` namespace.
+Argo CD lives in the `argocd` namespace.
+System components live in `kube-system`.
+
+### What is GitHub Actions?
+
+**GitHub Actions are robots that wake up when you push code or open a Pull Request.**
+You write a YAML file in `.github/workflows/` that says what to do.
+
+In this project the robots:
+- Validate your YAML, Ansible, and Kubernetes files before merge
+- Check that commit messages follow the Conventional Commits format
+- Write a deployment summary after merge
+
+### What are Conventional Commits?
+
+**Conventional Commits is a naming rule for your commit messages.**
+Instead of writing `fixed stuff`, you write `fix(ingress): correct hostname typo`.
+
+The format is: `type(optional-scope): short description`
+
+This makes the Git history readable, searchable, and can be used to generate changelogs.
+
+### What is CODEOWNERS?
+
+**CODEOWNERS is a file that says who must approve Pull Requests.**
+In this project `@viliwilli` must review and approve every change before it can be merged to `main`.
+
+---
+
+## Architecture overview
 
 ```text
-Local laptop / MacBook
+Your laptop
 │
-├── Vagrant + VirtualBox
-│   ├── k8s-control-01   192.168.56.10
-│   ├── k8s-worker-01    192.168.56.11
-│   └── k8s-worker-02    192.168.56.12
+├── VirtualBox (the virtualisation engine)
+│   └── Vagrant (provisions the VMs from Vagrantfile)
+│       ├── k8s-control-01   192.168.56.10   (Kubernetes control plane)
+│       ├── k8s-worker-01    192.168.56.11   (runs your pods)
+│       └── k8s-worker-02    192.168.56.12   (runs your pods)
 │
-├── Ansible
-│   ├── prepares all VMs
-│   ├── installs K3s server on the control node
-│   ├── joins worker nodes to the cluster
-│   └── installs Argo CD
+├── Ansible (configures the VMs over SSH)
+│   ├── installs system packages, disables swap
+│   ├── installs K3s server on control-01
+│   ├── joins worker-01 and worker-02 to the cluster
+│   └── installs Argo CD into the cluster
 │
 ├── K3s Kubernetes cluster
-│   ├── control-plane node
-│   ├── two worker nodes
-│   ├── Traefik ingress controller
-│   └── web application namespace
+│   ├── Traefik Ingress Controller (routes web.local → web Service)
+│   ├── argocd namespace (Argo CD pods)
+│   └── web namespace (your Nginx web app)
 │
-└── Argo CD
-    └── watches this GitHub repository and syncs the web application from Git
+└── Argo CD (GitOps engine)
+    └── watches github.com/viliwilli/task-k8s-web-project
+        └── syncs kubernetes/apps/web/ to the cluster automatically
 ```
 
----
+Request flow when you open `http://web.local` in a browser:
 
-## Basic tool explanation
-
-### Vagrant
-
-Vagrant is a tool for creating and managing virtual machines from code. In this project, the `Vagrantfile` describes three Ubuntu virtual machines, and `vagrant up` creates them automatically.
-
-### Ansible
-
-Ansible is an automation tool used to configure servers. In this project, Ansible connects to the Vagrant VMs over SSH and installs/configures K3s and Argo CD.
-
-### Kubernetes
-
-Kubernetes is a container orchestration platform. It runs containerized applications, manages replicas, services, networking, and keeps the desired state of applications.
-
-### K3s
-
-K3s is a lightweight Kubernetes distribution. It is useful for local labs, edge environments, and smaller clusters because it is easier to install and needs fewer resources than a full Kubernetes setup.
-
-### Argo CD
-
-Argo CD is a GitOps tool for Kubernetes. It watches a Git repository and keeps the Kubernetes cluster synchronized with the desired state stored in Git.
-
-### GitOps
-
-GitOps means that Git is the source of truth. Instead of manually deploying applications with `kubectl apply`, the desired state is stored in Git and Argo CD applies it to the Kubernetes cluster.
+```text
+Browser (http://web.local)
+  → /etc/hosts resolves web.local → 192.168.56.10
+  → Traefik Ingress Controller on k8s-control-01:80
+  → Ingress rule (host: web.local) → Service web
+  → One of 2 Nginx pods
+  → index.html from ConfigMap
+  → Browser displays the page
+```
 
 ---
 
@@ -88,149 +249,69 @@ GitOps means that Git is the source of truth. Instead of manually deploying appl
 
 ```text
 .
-├── CODEOWNERS
-├── README.md
-├── Vagrantfile
+├── .ansible-lint                    # ansible-lint configuration
+├── .gitignore                       # files to exclude from Git
+├── .yamllint.yml                    # yamllint configuration
+├── CODEOWNERS                       # who must review Pull Requests
+├── Makefile                         # shortcut commands (make up, make setup, …)
+├── README.md                        # this file
+├── Vagrantfile                      # VM definitions (3 Ubuntu VMs)
+├── repo-config.json                 # conventional commit types
+│
+├── .github/
+│   ├── pull_request_template.md     # checklist pre-filled when opening a PR on GitHub
+│   └── workflows/
+│       ├── pr-validate.yml          # validates changes on every PR (plan)
+│       ├── post-merge.yml           # runs after merge to main (apply summary)
+│       └── validate.yml             # reusable validation (called by the above two)
+│
 ├── ansible/
-│   ├── ansible.cfg
-│   ├── inventory.ini
+│   ├── ansible.cfg                  # Ansible settings (inventory path, SSH options)
+│   ├── inventory.ini                # list of VMs and their IPs
 │   ├── group_vars/
-│   │   └── all.yml
+│   │   └── all.yml                  # shared variables (K3s version, Argo CD version)
 │   └── playbooks/
-│       ├── argocd.yml
-│       ├── k3s-agents.yml
-│       ├── k3s-server.yml
-│       ├── prepare.yml
-│       └── site.yml
+│       ├── site.yml                 # master playbook — runs all steps in order
+│       ├── prepare.yml              # installs packages, disables swap, loads kernel modules
+│       ├── k3s-server.yml           # installs K3s control-plane on k8s-control-01
+│       ├── k3s-agents.yml           # installs K3s agents and joins worker nodes
+│       └── argocd.yml               # installs Argo CD into the cluster
+│
 ├── kubernetes/
 │   ├── apps/
-│   │   └── web/
-│   │       ├── configmap.yaml
-│   │       ├── deployment.yaml
-│   │       ├── ingress.yaml
-│   │       ├── namespace.yaml
-│   │       └── service.yaml
+│   │   └── web/                     # all resources for the web application
+│   │       ├── namespace.yaml       # creates the 'web' namespace
+│   │       ├── configmap.yaml       # stores index.html content
+│   │       ├── deployment.yaml      # runs 2 Nginx pods
+│   │       ├── service.yaml         # stable internal address for the pods
+│   │       └── ingress.yaml         # routes web.local → Service web via Traefik
 │   └── argocd/
-│       └── web-application.yaml
-├── scripts/
-│   └── kubeconfig.sh
-└── .gitignore
+│       └── web-application.yaml     # Argo CD Application (GitOps bootstrap)
+│
+└── scripts/
+    ├── check-commits.sh             # validates commit messages against repo-config.json
+    └── kubeconfig.sh                # fetches kubeconfig from control node to .kube/config
 ```
-
-### `CODEOWNERS`
-
-Defines the repository owner for code review purposes.
-
-### `Vagrantfile`
-
-Defines the local virtual machines.
-
-This project creates:
-
-```text
-k8s-control-01   192.168.56.10
-k8s-worker-01    192.168.56.11
-k8s-worker-02    192.168.56.12
-```
-
-### `ansible/`
-
-Contains Ansible configuration and playbooks.
-
-Main files:
-
-* `ansible.cfg`
-  Tells Ansible which inventory file to use and disables SSH host key checking for the local lab.
-
-* `inventory.ini`
-  Defines the Vagrant VMs and groups them into `control`, `workers`, and `k3s_cluster`.
-
-* `group_vars/all.yml`
-  Contains shared variables such as K3s server IP, Argo CD version, and the Flannel network interface.
-
-* `playbooks/prepare.yml`
-  Prepares all VMs for Kubernetes by installing packages, disabling swap, loading kernel modules, and configuring sysctl values.
-
-* `playbooks/k3s-server.yml`
-  Installs K3s server on the control node.
-
-* `playbooks/k3s-agents.yml`
-  Installs K3s agents on worker nodes and joins them to the cluster.
-
-* `playbooks/argocd.yml`
-  Installs Argo CD into the Kubernetes cluster.
-
-* `playbooks/site.yml`
-  Main playbook that runs the full setup in the correct order.
-
-### `kubernetes/apps/web/`
-
-Contains Kubernetes manifests for the simple web application.
-
-Files:
-
-* `namespace.yaml`
-  Creates the `web` namespace.
-
-* `configmap.yaml`
-  Stores a simple `index.html` page.
-
-* `deployment.yaml`
-  Runs two Nginx web server pods.
-
-* `service.yaml`
-  Exposes the web pods inside the cluster.
-
-* `ingress.yaml`
-  Exposes the web application through Traefik using the host `web.local`.
-
-### `kubernetes/argocd/`
-
-Contains the Argo CD Application manifest.
-
-* `web-application.yaml`
-  Tells Argo CD to watch this GitHub repository, read manifests from `kubernetes/apps/web`, and sync them into the Kubernetes cluster.
-
-### `scripts/`
-
-Contains helper scripts.
-
-* `kubeconfig.sh`
-  Fetches the K3s kubeconfig from the control node and stores it locally in `.kube/config`.
-
-### `.gitignore`
-
-Ignores local runtime files such as:
-
-* `.vagrant/`
-* `.kube/`
-* Ansible retry/cache files
-* macOS files
-* editor files
-
-These files are local only and should not be committed to Git.
 
 ---
 
 ## Prerequisites
 
-This lab runs on macOS, Linux, and Windows (via WSL). Choose your platform below.
-
 ### macOS (Intel or Apple Silicon)
 
 ```bash
-# Install Homebrew package manager if you do not have it
+# Install Homebrew if you do not have it
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
 
-# Install Vagrant, Ansible, kubectl, and Argo CD CLI
+# Install required tools
 brew tap hashicorp/tap
 brew install hashicorp/tap/hashicorp-vagrant
 brew install ansible kubectl argocd
 ```
 
-Install VirtualBox from the official website: https://www.virtualbox.org/wiki/Downloads
+Install VirtualBox from: https://www.virtualbox.org/wiki/Downloads
 
-On Apple Silicon Mac, run this VirtualBox workaround once before starting VMs:
+On **Apple Silicon only** — run this VirtualBox workaround once before starting VMs:
 
 ```bash
 VBoxManage setextradata global "VBoxInternal/Devices/pcbios/0/Config/DebugLevel"
@@ -240,8 +321,7 @@ VBoxManage setextradata global "VBoxInternal/Devices/pcbios/0/Config/DebugLevel"
 
 ```bash
 # Ansible
-sudo apt update
-sudo apt install -y ansible
+sudo apt update && sudo apt install -y ansible
 
 # kubectl
 curl -LO "https://dl.k8s.io/release/$(curl -Ls https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
@@ -249,42 +329,39 @@ sudo install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
 
 # Argo CD CLI
 VERSION=$(curl -Ls https://raw.githubusercontent.com/argoproj/argo-cd/stable/VERSION)
-curl -sSL -o /usr/local/bin/argocd \
-  "https://github.com/argoproj/argo-cd/releases/download/v${VERSION}/argocd-linux-amd64"
-sudo chmod +x /usr/local/bin/argocd
+curl -sSL -o /tmp/argocd "https://github.com/argoproj/argo-cd/releases/download/v${VERSION}/argocd-linux-amd64"
+sudo install -m 0755 /tmp/argocd /usr/local/bin/argocd
 
-# Vagrant — download the .deb from HashiCorp
+# Vagrant
 wget -O /tmp/vagrant.deb https://releases.hashicorp.com/vagrant/2.4.3/vagrant_2.4.3-1_amd64.deb
 sudo dpkg -i /tmp/vagrant.deb
-```
 
-Install VirtualBox: `sudo apt install -y virtualbox`
+# VirtualBox
+sudo apt install -y virtualbox
+```
 
 ### Windows (via WSL)
 
-Ansible does not run natively on Windows. The recommended approach is to use
-**WSL (Windows Subsystem for Linux)** which gives you a full Linux environment.
+Ansible does not run natively on Windows. Use **WSL** (Windows Subsystem for Linux):
 
 ```powershell
-# In PowerShell (as Administrator)
+# In PowerShell as Administrator
 wsl --install
-# Then restart your computer and open the Ubuntu app from the Start menu
+# Restart, then open the Ubuntu app
 ```
 
-Inside the WSL Ubuntu terminal, follow the Linux instructions above.
+Inside WSL Ubuntu, follow the Linux instructions above.
 
 Install VirtualBox for Windows from: https://www.virtualbox.org/wiki/Downloads
 
-VirtualBox is installed on Windows (not inside WSL). Vagrant running inside WSL
-can control the Windows VirtualBox via the environment variable:
+Add to `~/.bashrc` inside WSL so Vagrant can talk to Windows VirtualBox:
 
 ```bash
-# Add to ~/.bashrc inside WSL
 export VAGRANT_WSL_ENABLE_WINDOWS_ACCESS="1"
 export PATH="$PATH:/mnt/c/Program Files/Oracle/VirtualBox"
 ```
 
-### Verify installed tools (all platforms)
+### Verify all tools are installed
 
 ```bash
 vagrant --version
@@ -296,32 +373,71 @@ argocd version --client
 
 ---
 
-## Step 1: Clone the repository
+## Quick start (using Make)
+
+If you want a single command flow, use `make`. All commands are one line:
+
+```bash
+# 1. Clone the repository
+git clone https://github.com/viliwilli/task-k8s-web-project.git
+cd task-k8s-web-project
+
+# 2. Start VMs
+make up
+
+# 3. Test SSH connectivity
+make ping
+
+# 4. Install K3s + Argo CD on the VMs
+make setup
+
+# 5. Fetch kubeconfig to use kubectl from your laptop
+make kubeconfig
+export KUBECONFIG="$(pwd)/.kube/config"
+
+# 6. Tell Argo CD to start watching this repository
+make bootstrap
+
+# 7. Verify everything is running
+make status
+
+# 8. Add web.local to /etc/hosts and open in browser
+make hosts
+# → open http://web.local in your browser
+```
+
+Run `make help` at any time to see all available targets.
+
+---
+
+## Step-by-step setup (detailed)
+
+### Step 1: Clone the repository
 
 ```bash
 git clone https://github.com/viliwilli/task-k8s-web-project.git
 cd task-k8s-web-project
 ```
 
-This downloads the project to your local machine.
-
 ---
 
-## Step 2: Start the virtual machines
+### Step 2: Start the virtual machines
 
 ```bash
-vagrant up
+make up
+# same as: vagrant up
 ```
 
-This command reads the `Vagrantfile` and creates three Ubuntu VMs in VirtualBox.
+Vagrant reads `Vagrantfile` and creates three Ubuntu VMs in VirtualBox.
+This takes a few minutes the first time.
 
-Verify the VM status:
+Verify:
 
 ```bash
 vagrant status
 ```
 
-Expected result:
+Expected:
 
 ```text
 k8s-control-01   running
@@ -331,21 +447,16 @@ k8s-worker-02    running
 
 ---
 
-## Step 3: Test Ansible connectivity
-
-Go to the Ansible directory:
+### Step 3: Test Ansible connectivity
 
 ```bash
-cd ansible
+make ping
+# same as: cd ansible && ansible all -m ping
 ```
 
-Test if Ansible can connect to all VMs:
+This verifies that Ansible can SSH into all three VMs.
 
-```bash
-ansible all -m ping
-```
-
-Expected result:
+Expected:
 
 ```text
 k8s-control-01 | SUCCESS
@@ -353,624 +464,329 @@ k8s-worker-01  | SUCCESS
 k8s-worker-02  | SUCCESS
 ```
 
-This confirms that Ansible can connect to all VMs over SSH.
+---
+
+### Step 4: Install K3s and Argo CD
+
+```bash
+make setup
+# same as: cd ansible && ansible-playbook playbooks/site.yml
+```
+
+Ansible runs four playbooks in sequence:
+
+1. `prepare.yml` — installs system packages, disables swap, loads kernel modules
+2. `k3s-server.yml` — installs K3s control-plane on `k8s-control-01`
+3. `k3s-agents.yml` — installs K3s agents on both worker nodes and joins them
+4. `argocd.yml` — installs Argo CD into the cluster
+
+This takes 5–10 minutes.
 
 ---
 
-## Step 4: Install K3s and Argo CD
-
-Run the main Ansible playbook:
+### Step 5: Configure kubectl access
 
 ```bash
-ansible-playbook playbooks/site.yml
+make kubeconfig
+# same as: ./scripts/kubeconfig.sh
 ```
 
-This playbook does the following:
+This fetches the K3s kubeconfig file from the control node and saves it to `.kube/config`.
 
-1. Prepares all VMs for Kubernetes.
-2. Installs K3s server on `k8s-control-01`.
-3. Installs K3s agents on `k8s-worker-01` and `k8s-worker-02`.
-4. Installs Argo CD into the cluster.
-
-After the playbook finishes, go back to the repository root:
-
-```bash
-cd ..
-```
-
----
-
-## Step 5: Configure local kubectl access
-
-Fetch the kubeconfig from the control node:
-
-```bash
-./scripts/kubeconfig.sh
-```
-
-Then export the kubeconfig path:
+Then export it so `kubectl` knows which cluster to use:
 
 ```bash
 export KUBECONFIG="$(pwd)/.kube/config"
 ```
 
-This tells `kubectl` which Kubernetes cluster to use.
+> **Note:** This `export` only lasts for the current terminal session.
+> Add it to your `~/.zshrc` or `~/.bashrc` to make it permanent.
 
-Verify the Kubernetes API endpoint:
+Verify:
 
 ```bash
 kubectl config view --minify -o jsonpath='{.clusters[0].cluster.server}'; echo
 ```
 
-Expected result:
+Expected: `https://192.168.56.10:6443`
+
+---
+
+### Step 6: Verify the cluster
+
+```bash
+make status
+```
+
+Expected output includes:
 
 ```text
-https://192.168.56.10:6443
+=== Kubernetes Nodes ===
+NAME             STATUS   ROLES
+k8s-control-01   Ready    control-plane
+k8s-worker-01    Ready    <none>
+k8s-worker-02    Ready    <none>
 ```
 
 ---
 
-## Step 6: Verify the Kubernetes cluster
-
-Check Kubernetes nodes:
+### Step 7: Bootstrap Argo CD
 
 ```bash
-kubectl get nodes -o wide
+make bootstrap
+# same as: kubectl apply -f kubernetes/argocd/web-application.yaml
 ```
 
-Expected result:
+This applies one manifest that tells Argo CD:
 
 ```text
-NAME             STATUS   ROLES           INTERNAL-IP
-k8s-control-01   Ready    control-plane   192.168.56.10
-k8s-worker-01    Ready    <none>          192.168.56.11
-k8s-worker-02    Ready    <none>          192.168.56.12
+Watch: github.com/viliwilli/task-k8s-web-project
+Branch: main
+Path: kubernetes/apps/web
+Sync to: the Kubernetes cluster
 ```
 
-Check all pods:
-
-```bash
-kubectl get pods -A
-```
-
-You should see system pods in `kube-system` and Argo CD pods in `argocd`.
+This is the **GitOps bootstrap** — a one-time step. After this, every change merged
+to `main` is automatically synced to the cluster by Argo CD.
 
 ---
 
-## Step 7: Bootstrap the Argo CD application
-
-Apply the Argo CD Application manifest:
-
-```bash
-kubectl apply -f kubernetes/argocd/web-application.yaml
-```
-
-This does not manually deploy the web application.
-It only tells Argo CD:
-
-```text
-Watch this GitHub repository.
-Watch the main branch.
-Use the path kubernetes/apps/web.
-Sync the desired state into the Kubernetes cluster.
-```
-
-This is the GitOps bootstrap step.
-
----
-
-## Step 8: Verify Argo CD sync status
-
-Check the Argo CD Application:
+### Step 8: Verify Argo CD sync status
 
 ```bash
 kubectl get application web-application -n argocd -o wide
 ```
 
-Expected result:
+Expected:
 
 ```text
 NAME              SYNC STATUS   HEALTH STATUS
 web-application   Synced        Healthy
 ```
 
-This means Argo CD successfully synchronized the Kubernetes cluster with the Git repository.
+`Synced` = cluster matches Git.
+`Healthy` = all pods are running.
 
 ---
 
-## Step 9: Verify the web application
-
-Check resources in the `web` namespace:
+### Step 9: Verify the web application
 
 ```bash
-kubectl get all -n web
+make status
 ```
 
-Expected result:
+Check that the `web` namespace contains running pods and an Ingress:
 
 ```text
+=== Web Namespace ===
 pod/web-...       1/1 Running
 service/web       ClusterIP
 deployment/web    2/2 Ready
+
+=== Ingress ===
+NAME   CLASS     HOSTS       ADDRESS
+web    traefik   web.local   192.168.56.10,...
 ```
 
-Check the Ingress:
+Test with curl:
 
 ```bash
-kubectl get ingress -n web -o wide
+make web-test
+# same as: curl -H "Host: web.local" http://192.168.56.10/
 ```
 
-Expected result:
+Expected: HTML page containing `<h1>Hello from Kubernetes!</h1>`
 
-```text
-NAME   CLASS     HOSTS       ADDRESS                                     PORTS
-web    traefik   web.local   192.168.56.10,192.168.56.11,192.168.56.12   80
-```
+---
 
-Test the web application:
+### Step 10: Open in a browser
+
+Add `web.local` to your system's local DNS:
 
 ```bash
-curl -H "Host: web.local" http://192.168.56.10/
+make hosts
+# same as: echo "192.168.56.10 web.local" | sudo tee -a /etc/hosts
 ```
 
-Expected result contains:
+Open your browser and go to:
 
-```html
-<h1>Hello from Kubernetes!</h1>
+```
+http://web.local
 ```
 
-This confirms that the request path works:
+You will see a white card page:
 
-```text
-Local laptop
-→ 192.168.56.10:80
-→ Traefik Ingress Controller
-→ Ingress rule for web.local
-→ Kubernetes Service web
-→ Nginx web pod
+```
+Hello from Kubernetes!
+
+This simple web application is deployed to a local K3s cluster.
+The deployment is managed using Argo CD with a GitOps approach.
+Repository path: kubernetes/apps/web
+```
+
+To remove the hosts entry later:
+
+```bash
+make hosts-remove
 ```
 
 ---
 
-## Optional: Open Argo CD UI
-
-Port-forward the Argo CD server:
+### Optional: Open Argo CD UI
 
 ```bash
-kubectl port-forward svc/argocd-server -n argocd 8080:443
+make argocd-ui
+# same as: kubectl port-forward svc/argocd-server -n argocd 8080:443
 ```
 
-Open in browser:
+Open: `https://localhost:8080`
 
-```text
-https://localhost:8080
-```
-
-Get the initial admin password:
+Get the admin password:
 
 ```bash
 argocd admin initial-password -n argocd
 ```
 
-Login:
-
-```text
-Username: admin
-Password: output from the command above
-```
-
-The browser may show a certificate warning because Argo CD uses a self-signed certificate in this local setup.
+Login with username `admin` and the password above.
+The browser will show a certificate warning — this is expected for a local self-signed cert, click "Proceed".
 
 ---
 
-## GitOps workflow explanation
+## Makefile reference
 
-The web application is not deployed manually with:
-
-```bash
-kubectl apply -f kubernetes/apps/web
-```
-
-Instead, Argo CD watches this repository:
-
-```text
-repoURL: https://github.com/viliwilli/task-k8s-web-project.git
-targetRevision: main
-path: kubernetes/apps/web
-```
-
-That means:
-
-```text
-Change in Git
-→ merge to main
-→ Argo CD detects the change
-→ Argo CD syncs Kubernetes
-→ cluster matches Git
-```
-
-In a team workflow, changes should be done through pull requests.
-
-Example:
-
-```bash
-git checkout -b feature/update-web-page
-# edit Kubernetes manifests
-git add .
-git commit -m "feat: update web page"
-git push -u origin feature/update-web-page
-```
-
-Then open a Pull Request to `main`.
-
-After merge, Argo CD syncs the new desired state to the cluster.
+| Target | What it does |
+|--------|-------------|
+| `make help` | Show all available targets |
+| `make up` | Start VMs (`vagrant up`) |
+| `make ping` | Test Ansible SSH connectivity |
+| `make setup` | Run full Ansible provisioning |
+| `make kubeconfig` | Fetch kubeconfig from control node |
+| `make bootstrap` | Apply Argo CD Application manifest |
+| `make status` | Show nodes, Argo CD app, web namespace |
+| `make web-test` | Test the app with curl |
+| `make argocd-ui` | Port-forward Argo CD to localhost:8080 |
+| `make hosts` | Add `web.local` to `/etc/hosts` |
+| `make hosts-remove` | Remove `web.local` from `/etc/hosts` |
+| `make down` | Stop VMs without deleting them |
+| `make clean` | Destroy all VMs permanently |
+| `make lint` | Run yamllint + ansible-lint locally |
 
 ---
 
-## Important networking note
+## GitOps workflow — how changes reach the cluster
 
-Vagrant creates two network interfaces inside each VM:
-
-```text
-eth0 = NAT network
-eth1 = host-only network
-```
-
-The NAT interface usually has the same IP on all VMs:
+The web application is **never deployed manually**. The flow is always through Git:
 
 ```text
-10.0.2.15
-```
+1. Create a branch
+   git checkout -b Jira-ticket-011
 
-This is not suitable for Kubernetes inter-node communication.
+2. Make a change (e.g. edit kubernetes/apps/web/configmap.yaml)
 
-The host-only interface has unique IP addresses:
+3. Commit with a conventional commit message
+   git add .
+   git commit -m "feat(web): update page title"
 
-```text
-k8s-control-01   192.168.56.10
-k8s-worker-01    192.168.56.11
-k8s-worker-02    192.168.56.12
-```
+4. Push the branch
+   git push -u origin Jira-ticket-011
 
-For this reason, K3s/Flannel is configured to use:
+5. Open GitHub → your repository → click "New pull request" → select your branch
+   The PR description is pre-filled with the checklist from pull_request_template.md
 
-```text
-eth1
-```
+6. PR validation runs automatically (yaml, ansible, kubernetes, commit checks)
 
-This is configured in:
+7. Reviewer approves → merge to main
 
-```text
-ansible/group_vars/all.yml
-```
+8. Argo CD detects the change on main (within ~3 minutes)
+   Argo CD syncs: kubectl apply -f kubernetes/apps/web/
+   Kubernetes updates the running pods
 
-with:
-
-```yaml
-k3s_flannel_iface: "eth1"
-```
-
-And passed to K3s using:
-
-```text
---flannel-iface eth1
-```
-
-This makes multi-node pod networking work correctly.
-
----
-
-## Useful daily commands
-
-### Start the lab
-
-```bash
-cd task-k8s-web-project
-vagrant up
-cd ansible
-ansible all -m ping
-cd ..
-./scripts/kubeconfig.sh
-export KUBECONFIG="$(pwd)/.kube/config"
-kubectl get nodes -o wide
-```
-
-### Stop the lab without deleting it
-
-```bash
-vagrant halt
-```
-
-This powers off the VMs but keeps their disks and state.
-
-### Delete the lab completely
-
-```bash
-vagrant destroy -f
-```
-
-This removes all VMs.
-To recreate the environment, run:
-
-```bash
-vagrant up
-cd ansible
-ansible-playbook playbooks/site.yml
-cd ..
-./scripts/kubeconfig.sh
-export KUBECONFIG="$(pwd)/.kube/config"
-kubectl get nodes -o wide
+9. make status → web-application shows Synced + Healthy
 ```
 
 ---
 
-## Troubleshooting
+## Pull Request template
 
-### Problem: kubectl tries to connect to localhost:8080
+The file `.github/pull_request_template.md` is a **GitHub feature** — not a workflow.
 
-Error example:
+When you click "New pull request" on GitHub, the description text box is automatically
+pre-filled with the template. You do not have to remember what to write — the checklist
+is already there:
 
-```text
-The connection to the server localhost:8080 was refused
-```
+- What changed and why
+- Type of change (feat / fix / docs / …) — must match your commit message type
+- Which Kubernetes manifests were affected
+- Which Ansible playbooks were affected
+- Testing checklist (what you ran locally before opening the PR)
 
-Reason:
-
-`kubectl` does not know which kubeconfig to use.
-
-Fix:
-
-```bash
-export KUBECONFIG="$(pwd)/.kube/config"
-```
-
-Then test:
-
-```bash
-kubectl get nodes -o wide
-```
-
----
-
-### Problem: Argo CD Application is Unknown
-
-Error example:
-
-```text
-SYNC STATUS: Unknown
-```
-
-Possible reason:
-
-Argo CD components cannot communicate internally through the Kubernetes network.
-
-In this project, this was solved by explicitly configuring K3s/Flannel to use the correct VirtualBox host-only network interface:
-
-```yaml
-k3s_flannel_iface: "eth1"
-```
-
-Then rebuild the lab:
-
-```bash
-vagrant destroy -f
-vagrant up
-cd ansible
-ansible-playbook playbooks/site.yml
-```
-
----
-
-### Problem: curl returns 404 page not found
-
-Command:
-
-```bash
-curl -H "Host: web.local" http://192.168.56.10/
-```
-
-Possible reason:
-
-Traefik is reachable, but the Ingress rule is missing or not synced yet.
-
-Check:
-
-```bash
-kubectl get ingress -n web -o wide
-kubectl get application web-application -n argocd -o wide
-```
-
-Expected result:
-
-```text
-web-application   Synced   Healthy
-```
-
-and:
-
-```text
-web   traefik   web.local   192.168.56.10,192.168.56.11,192.168.56.12   80
-```
-
----
-
-## Validation commands
-
-Use these commands to prove that the solution works:
-
-```bash
-kubectl get nodes -o wide
-kubectl get pods -A
-kubectl get application web-application -n argocd -o wide
-kubectl get all -n web
-kubectl get ingress -n web -o wide
-curl -H "Host: web.local" http://192.168.56.10/
-```
-
-Expected highlights:
-
-```text
-All Kubernetes nodes are Ready.
-Argo CD pods are Running.
-web-application is Synced and Healthy.
-The web namespace contains 2 running web pods.
-Ingress exposes host web.local.
-curl returns the HTML page.
-```
-
----
-
-## Cleanup
-
-To stop the VMs:
-
-```bash
-vagrant halt
-```
-
-To delete all VMs:
-
-```bash
-vagrant destroy -f
-```
-
-To remove local kubeconfig:
-
-```bash
-rm -rf .kube/
-```
-
----
-
-## Makefile shortcuts
-
-Instead of running individual commands manually, use `make`:
-
-```bash
-make help        # show all available targets
-make up          # start VMs (vagrant up)
-make ping        # test Ansible SSH connectivity
-make setup       # run full Ansible provisioning (K3s + Argo CD)
-make kubeconfig  # fetch kubeconfig from control node
-make bootstrap   # apply the Argo CD Application manifest
-make status      # show nodes, Argo CD status, web namespace
-make web-test    # curl the web application and check the response
-make argocd-ui   # port-forward Argo CD UI to https://localhost:8080
-make down        # stop VMs without deleting them
-make clean       # destroy all VMs
-make lint        # run yamllint + ansible-lint locally
-```
-
-Quick start using only Make:
-
-```bash
-make up
-make ping
-make setup
-make kubeconfig
-make bootstrap
-make status
-make web-test
-```
+This makes it easy for a reviewer (and for yourself) to see exactly what was tested
+before merging.
 
 ---
 
 ## GitHub Actions CI/CD workflows
 
-This repository contains three automated workflows in `.github/workflows/`.
-They run automatically on GitHub — you do not need to trigger them manually.
+The `.github/workflows/` directory contains three files.
+They run automatically on GitHub — you do not start them manually.
 
-### What is a GitHub Actions workflow?
+### validate.yml — Reusable validation (not triggered directly)
 
-A workflow is a YAML file that describes a sequence of steps to run in the
-cloud (on GitHub's servers). Every time you push code or open a Pull Request,
-GitHub runs the relevant workflows automatically.
+This file contains the validation logic that is **shared** between `pr-validate.yml`
+and `post-merge.yml`. It is defined once to avoid copy-pasting the same checks twice.
 
-Think of them as a robot that checks your code before it reaches production.
+It runs three jobs in parallel:
+- **YAML Syntax** — checks all `.yml` files in `ansible/` and `kubernetes/` with `yamllint`
+- **Ansible Lint** — checks Ansible playbooks follow best practices with `ansible-lint`
+- **Kubernetes Manifests** — validates K8s YAML against official schemas with `kubeconform`
 
----
+### pr-validate.yml — PR validation ("plan")
 
-### auto-pr.yml — Automatic Draft Pull Request
+**Triggered by:** opening or updating a Pull Request targeting `main`.
 
-**When it runs:** When you push a new branch to GitHub.
-
-**What it does:**
-Automatically creates a Draft Pull Request for your branch. You no longer
-need to go to GitHub and click "Compare & pull request" manually.
-
-```
-git push -u origin Jira-ticket-010
-    ↓
-auto-pr.yml triggers
-    ↓
-Draft PR created: "Jira Ticket 010"
-    ↓
-pr-validate.yml triggers automatically on the new PR
-```
-
-A Draft PR:
-- Shows up in the PR list (visible to reviewers)
-- Runs CI checks immediately
-- Cannot be accidentally merged (must be marked "Ready for review" first)
-
----
-
-### pr-validate.yml — Pull Request Validation (Plan)
-
-**When it runs:** Every time a Pull Request to `main` is opened or updated.
-
-**What it does:**
-Runs 4 checks in parallel to verify the changes are correct BEFORE merge.
-Think of it like `terraform plan` — it shows what would happen without
-actually changing anything.
-
-| Check | What it validates |
-|-------|------------------|
-| YAML Syntax | All `.yml`/`.yaml` files have valid YAML syntax |
-| Ansible Lint | Ansible playbooks follow best practices |
-| Kubernetes Manifests | K8s YAML matches the official Kubernetes schemas |
-| Conventional Commits | Commit messages follow the format in `repo-config.json` |
-
-After all checks finish, the workflow posts a summary comment on the PR:
+Calls `validate.yml` for file checks, plus:
+- **Conventional Commits** — validates commit messages against `repo-config.json`
+- **PR Comment** — posts a pass/fail table directly on the PR
 
 ```
-## 🔍 PR Validation Summary (Plan)
+## PR Validation Summary
 
-| Check                | Status     |
-|----------------------|------------|
-| YAML Syntax          | ✅ passed  |
-| Ansible Lint         | ✅ passed  |
-| Kubernetes Manifests | ✅ passed  |
-| Conventional Commits | ✅ passed  |
+| Check                          | Result     |
+|--------------------------------|------------|
+| YAML · Ansible · Kubernetes    | ✅ passed  |
+| Conventional Commits           | ✅ passed  |
+
+✅ All checks passed. Ready to merge.
 ```
 
-If any check fails, fix the issue and push again — the comment will update.
+If you push more commits, the comment **updates in place** — it does not create a new one.
 
----
+### post-merge.yml — Post-merge summary ("apply")
 
-### post-merge.yml — Post-Merge Summary (Apply)
+**Triggered by:** any push to `main` (i.e. after a PR is merged).
 
-**When it runs:** Every time a commit lands on `main` (i.e. after PR merge).
+Calls `validate.yml` again to confirm the merged state is clean, then writes a
+**deployment summary** to the Actions UI (Actions tab → the run → Summary tab):
 
-**What it does:**
-Runs the same validations again on the merged state, then generates a
-deployment summary in the Actions UI. Think of it like `terraform apply` —
-it confirms the new desired state is valid and shows what Argo CD will sync.
+```
+## Deployment Summary
 
-**Where to see the summary:**
-GitHub → Actions tab → select the run → Summary tab
+Merged by viliwilli · abc1234
 
-After this workflow passes, Argo CD detects the change on `main` (within ~3 minutes)
-and synchronises the Kubernetes cluster automatically.
+✅ All validations passed. Argo CD will sync the cluster within ~3 minutes.
+
+| File                              | Kind        | Name            |
+|-----------------------------------|-------------|-----------------|
+| kubernetes/apps/web/configmap.yaml | ConfigMap  | web-content     |
+| kubernetes/apps/web/deployment.yaml | Deployment | web            |
+| ...                               | ...         | ...             |
+```
 
 ---
 
 ## Conventional Commits
 
-All commit messages in this repository must follow the
-[Conventional Commits](https://www.conventionalcommits.org/) format.
-
-The allowed types are defined in `repo-config.json`:
+All commits must follow the format defined in `repo-config.json`:
 
 ```
 type(optional-scope): short description
@@ -979,114 +795,258 @@ type(optional-scope): short description
 Examples:
 
 ```bash
-feat: add nginx deployment manifest
+feat: add Nginx deployment
 fix(ingress): correct hostname from web to web.local
-docs: update README with Linux prerequisites
-refactor(ansible): split prepare playbook into separate tasks
-chore: bump ArgoCD version to v3.4.4
-ci: add yamllint to PR validation workflow
-break: remove support for single-node cluster
+docs: update README prerequisites
+refactor(ansible): split prepare into two playbooks
+chore: bump Argo CD version to v3.5.0
+ci: add kubeconform to PR validation
+break: require 3 worker nodes instead of 2
 ```
 
-### Why conventional commits?
+| Type | Meaning | Version bump |
+|------|---------|-------------|
+| `feat` | New feature | minor |
+| `fix` | Bug fix | patch |
+| `break` | Breaking change | major |
+| `refactor` | Reorganise, no behaviour change | none |
+| `docs` | Documentation only | none |
+| `chore` | Maintenance, dependency update | none |
+| `ci` | CI/CD pipeline change | none |
 
-- The Git history becomes machine-readable and easy to search
-- Each commit type signals the kind of change (`feat` = new thing, `fix` = bug)
-- Automated changelogs can be generated from the commit history
-- Code reviewers immediately understand the scope and intent of a change
-
-### How the type affects releases (from `repo-config.json`)
-
-| Type | Meaning | Release impact |
-|------|---------|----------------|
-| `feat` | New feature | minor version bump |
-| `fix` | Bug fix | patch version bump |
-| `break` | Breaking change | major version bump |
-| `refactor` | Code restructure | no release |
-| `docs` | Documentation only | no release |
-| `chore` | Maintenance | no release |
-| `ci` | CI/CD pipeline | no release |
-
-### Fixing a bad commit message
-
-If you forgot the conventional format, fix it before pushing:
+**Check commit messages locally before pushing:**
 
 ```bash
-# Fix the last commit message
+git log origin/main..HEAD --format="%s" | ./scripts/check-commits.sh
+```
+
+**Fix a bad commit message:**
+
+```bash
+# Fix only the last commit
 git commit --amend -m "feat: add Argo CD application manifest"
 
-# Fix an older commit (interactive rebase)
+# Fix an older commit
 git rebase -i origin/main
-# Change 'pick' to 'reword' next to the commit you want to fix
-```
-
-### Checking commit messages locally
-
-```bash
-# Check all commits in your branch vs main
-git log origin/main..HEAD --format="%s" | ./scripts/check-commits.sh
+# Change 'pick' to 'reword' on the commit you want to fix
 ```
 
 ---
 
 ## Branch protection and CODEOWNERS
 
-### What is branch protection?
+### Branch protection
 
-Branch protection is a GitHub setting that prevents direct commits to `main`.
-Every change must go through a Pull Request and receive an approval before
-merging. This enforces code review and ensures CI checks always run.
+Branch protection prevents anyone from pushing directly to `main`.
+Every change must go through a Pull Request with at least one approval.
 
-### How to enable branch protection on your repository
+**How to enable it:**
 
-1. Go to your repository on GitHub
-2. Click **Settings** → **Branches**
-3. Click **Add branch protection rule**
-4. Set **Branch name pattern** to `main`
-5. Enable these options:
-   - ✅ **Require a pull request before merging**
-   - ✅ **Require approvals** (set minimum to 1)
-   - ✅ **Require review from Code Owners**
-   - ✅ **Require status checks to pass before merging**
-     - Add: `YAML Syntax Check`
-     - Add: `Ansible Lint`
-     - Add: `Kubernetes Manifest Validation`
-     - Add: `Conventional Commits Check`
-   - ✅ **Do not allow bypassing the above settings**
-6. Click **Save changes**
+1. GitHub → Settings → Branches → Add branch protection rule
+2. Branch name pattern: `main`
+3. Enable:
+   - ✅ Require a pull request before merging
+   - ✅ Require approvals — set to 1
+   - ✅ Require review from Code Owners
+   - ✅ Require status checks to pass:
+     - `YAML Syntax`
+     - `Ansible Lint`
+     - `Kubernetes Manifests`
+     - `Conventional Commits`
+   - ✅ Do not allow bypassing the above settings
+4. Save changes
 
-After this is set up, nobody (not even the repository owner) can push directly
-to `main`. Every change requires a PR.
+### CODEOWNERS
 
-### What is CODEOWNERS?
-
-The `CODEOWNERS` file defines who must review changes before they can be merged.
-
-This repository has:
+The `CODEOWNERS` file at the repository root contains:
 
 ```
 * @viliwilli @vcillik
 ```
 
-This means: for every file in the repository, GitHub will request a review from
-`@viliwilli` or `@vcillik` before the PR can be merged.
+This means GitHub requests a review from `@viliwilli` or `@vcillik` for every
+file change. The "Require review from Code Owners" protection rule enforces this.
 
-The "Require review from Code Owners" branch protection rule (step 5 above)
-is what actually enforces this requirement.
+---
+
+## Important networking note
+
+Vagrant creates **two network interfaces** inside each VM:
+
+| Interface | Type | IP |
+|-----------|------|----|
+| `eth0` | NAT | `10.0.2.15` (same on all VMs) |
+| `eth1` | Host-only | `192.168.56.10/11/12` (unique per VM) |
+
+The `eth0` NAT IP is the same on all three VMs. Kubernetes pods on different nodes
+would not be able to talk to each other if Flannel used it.
+
+**K3s is configured to use `eth1`** via:
+
+```yaml
+# ansible/group_vars/all.yml
+k3s_flannel_iface: "eth1"
+```
+
+This makes multi-node pod networking work correctly.
+
+---
+
+## Troubleshooting
+
+### `kubectl` tries to connect to `localhost:8080`
+
+```text
+The connection to the server localhost:8080 was refused
+```
+
+`kubectl` does not know which cluster to use. Fix:
+
+```bash
+export KUBECONFIG="$(pwd)/.kube/config"
+```
+
+---
+
+### Argo CD Application shows `Unknown` or `OutOfSync`
+
+Argo CD components cannot communicate across nodes because the wrong network interface
+is being used. Verify that `k3s_flannel_iface: "eth1"` is set in `ansible/group_vars/all.yml`,
+then rebuild:
+
+```bash
+make clean
+make up
+make setup
+make kubeconfig && export KUBECONFIG="$(pwd)/.kube/config"
+make bootstrap
+```
+
+---
+
+### `curl` returns `404`
+
+Traefik is reachable but the Ingress rule is missing or not synced yet.
+
+```bash
+kubectl get ingress -n web -o wide
+kubectl get application web-application -n argocd -o wide
+```
+
+Both should show the Ingress with `web.local` and the application as `Synced + Healthy`.
+If the application is not synced, wait 3 minutes or force a sync:
+
+```bash
+kubectl annotate application web-application argocd.argoproj.io/refresh=normal -n argocd
+```
+
+---
+
+### `make web-test` passes but browser shows nothing
+
+You have not added `web.local` to `/etc/hosts`:
+
+```bash
+make hosts
+```
+
+---
+
+## Validation — prove the solution works
+
+Run all of these to demonstrate a working setup:
+
+```bash
+kubectl get nodes -o wide                              # all nodes Ready
+kubectl get pods -A                                    # system + argocd pods Running
+kubectl get application web-application -n argocd -o wide  # Synced + Healthy
+kubectl get all -n web                                 # 2 web pods Running
+kubectl get ingress -n web -o wide                     # web.local on 80
+make web-test                                          # HTML response from curl
+# open http://web.local in browser                    # page visible
+```
+
+---
+
+## Scaling the cluster
+
+The cluster is designed to scale by adding worker nodes. No code changes are needed in
+Kubernetes manifests or Argo CD — only the VM and Ansible inventory need to be updated.
+
+**Step 1** — Add the new node to `Vagrantfile`:
+
+```ruby
+NODES = [
+  { name: "k8s-control-01", ip: "192.168.56.10", memory: 2048, cpus: 2 },
+  { name: "k8s-worker-01",  ip: "192.168.56.11", memory: 2048, cpus: 2 },
+  { name: "k8s-worker-02",  ip: "192.168.56.12", memory: 2048, cpus: 2 },
+  { name: "k8s-worker-03",  ip: "192.168.56.13", memory: 2048, cpus: 2 },  # new
+]
+```
+
+**Step 2** — Add it to `ansible/inventory.ini`:
+
+```ini
+[workers]
+k8s-worker-01 ansible_host=192.168.56.11
+k8s-worker-02 ansible_host=192.168.56.12
+k8s-worker-03 ansible_host=192.168.56.13  # new
+```
+
+**Step 3** — Start and provision the new VM only:
+
+```bash
+vagrant up k8s-worker-03
+cd ansible && ansible-playbook playbooks/k3s-agents.yml --limit k8s-worker-03
+```
+
+**Step 4** — Verify:
+
+```bash
+kubectl get nodes -o wide
+# k8s-worker-03 should appear as Ready
+```
+
+Argo CD and the web application require no changes — Kubernetes automatically schedules
+pods across all available nodes.
+
+---
+
+## Cleanup
+
+```bash
+make down        # stop VMs (keeps disks, fast to resume)
+make up          # resume stopped VMs
+
+make clean       # destroy all VMs permanently
+# To recreate from scratch:
+make up && make setup && make kubeconfig
+export KUBECONFIG="$(pwd)/.kube/config"
+make bootstrap && make status
+```
+
+Remove local files:
+
+```bash
+rm -rf .kube/      # remove kubeconfig
+make hosts-remove  # remove web.local from /etc/hosts
+```
 
 ---
 
 ## Summary
 
-This project demonstrates a complete local DevOps workflow:
+This project demonstrates a complete local DevOps pipeline:
 
 ```text
-Vagrant provisions virtual machines.
-Ansible configures the machines.
-K3s runs Kubernetes.
-Argo CD manages the application using GitOps.
-Kubernetes runs and exposes the web application.
-GitHub Actions validates every change before it reaches main.
+Vagrantfile          → describes the virtual machines
+vagrant up           → creates them in VirtualBox
+Ansible playbooks    → configures K3s + Argo CD on the VMs
+Argo CD              → watches this Git repo and syncs Kubernetes automatically
+kubernetes/apps/web/ → the desired state of the web application
+http://web.local     → the running result in your browser
+GitHub Actions       → validates every change before it reaches main
 ```
 
-The desired application state is stored in Git, and Argo CD keeps the Kubernetes cluster synchronized with that state.
+The key principle: **Git is the single source of truth.**
+No manual `kubectl apply`. No manual deploys. Everything goes through a Pull Request.
