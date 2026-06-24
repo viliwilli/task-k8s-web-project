@@ -40,7 +40,7 @@ jobs:
         run: |
           sudo apt-get install -y -q jq
           chmod +x scripts/check-commits.sh
-          git log origin/main..HEAD --format="%s" | ./scripts/check-commits.sh
+          git log origin/main..HEAD --no-merges --format="%s" | ./scripts/check-commits.sh
 
   # Post a consolidated result comment on the PR
   comment:

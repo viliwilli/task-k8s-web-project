@@ -817,7 +817,7 @@ break: require 3 worker nodes instead of 2
 **Check commit messages locally before pushing:**
 
 ```bash
-git log origin/main..HEAD --format="%s" | ./scripts/check-commits.sh
+git log origin/main..HEAD --no-merges --format="%s" | ./scripts/check-commits.sh
 ```
 
 **Fix a bad commit message:**
