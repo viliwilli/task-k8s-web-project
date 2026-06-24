@@ -21,8 +21,8 @@
 # - Makes code reviews easier (reviewers know what kind of change it is)
 #
 # Usage:
-#   git log origin/main..HEAD --format="%s" | ./scripts/check-commits.sh
-#   git log origin/main..HEAD --format="%s" | ./scripts/check-commits.sh /path/to/repo-config.json
+#   git log origin/main..HEAD --no-merges --format="%s" | ./scripts/check-commits.sh
+#   git log origin/main..HEAD --no-merges --format="%s" | ./scripts/check-commits.sh /path/to/repo-config.json
 #
 # Exit code 0 = all commits are valid
 # Exit code 1 = one or more commits have invalid format
