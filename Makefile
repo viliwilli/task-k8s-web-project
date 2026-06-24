@@ -94,12 +94,22 @@ argocd-ui: ## Port-forward the Argo CD UI to https://localhost:8080
 	@echo "Press Ctrl+C to stop the port-forward."
 	$(KUBECTL) port-forward svc/argocd-server -n argocd 8080:443
 
-web-test: ## Test the web application with curl
+web-test: ## Test the web application with curl (no browser needed)
 	@echo "Testing web application..."
 	curl -s -H "Host: web.local" http://192.168.56.10/ | grep -o '<h1>.*</h1>' || \
 	  (echo "ERROR: Expected HTML not found. Is the cluster running?" && exit 1)
 	@echo ""
 	@echo "Web application is reachable."
+
+hosts: ## Add web.local → 192.168.56.10 to /etc/hosts (enables browser access)
+	@grep -q "web.local" /etc/hosts && \
+	  echo "web.local already in /etc/hosts" || \
+	  (echo "192.168.56.10 web.local" | sudo tee -a /etc/hosts && echo "Added web.local to /etc/hosts")
+	@echo "Open in browser: http://web.local"
+
+hosts-remove: ## Remove web.local from /etc/hosts
+	sudo sed -i.bak '/web.local/d' /etc/hosts
+	@echo "Removed web.local from /etc/hosts"
 
 down: ## Stop VMs without destroying them (preserves disk state)
 	vagrant halt

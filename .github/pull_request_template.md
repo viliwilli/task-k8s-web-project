@@ -43,12 +43,11 @@
 
 <!-- Check the items you have tested locally. CI checks run automatically. -->
 
-- [ ] `vagrant up` — VMs started without errors
-- [ ] `ansible all -m ping` — Ansible can connect to all VMs
-- [ ] `ansible-playbook playbooks/site.yml` — full setup completed
-- [ ] `kubectl get nodes -o wide` — all nodes are Ready
-- [ ] Argo CD shows `Synced` + `Healthy` for `web-application`
-- [ ] `curl -H "Host: web.local" http://192.168.56.10/` — returns expected HTML
+- [ ] `make up` — VMs started without errors
+- [ ] `make ping` — Ansible can connect to all VMs
+- [ ] `make setup` — full Ansible provisioning completed
+- [ ] `make status` — all nodes Ready, Argo CD Synced + Healthy
+- [ ] `make web-test` — returns expected HTML
 
 ## Notes for reviewer
 
