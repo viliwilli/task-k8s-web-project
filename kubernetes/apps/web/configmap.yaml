@@ -10,7 +10,7 @@ data:
     <!DOCTYPE html>
     <html>
     <head>
-      <title>Kubernetes GitOps Web App</title>
+      <title>Kubernetes Web App</title>
       <style>
         body {
           font-family: Arial, sans-serif;
@@ -37,10 +37,9 @@ data:
     </head>
     <body>
       <div class="card">
-        <h1>Hello from Kubernetes!</h1>
-        <p>This simple web application is deployed to a local K3s cluster.</p>
-        <p>The deployment is managed using <strong>Argo CD</strong> with a GitOps approach.</p>
-        <p>Repository path: <code>kubernetes/apps/web</code></p>
+        <h1>Hello hello from Kubernetes!</h1>
+        <p>Simple web application deployed with Kubernetes.</p>
+        <p>My first experience with Kubernetes, ArgoCD and Ansible.</p>
       </div>
     </body>
     </html>

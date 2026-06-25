@@ -2,6 +2,7 @@
 
 A local DevOps lab that provisions virtual machines, installs a Kubernetes cluster, and
 deploys a simple web application — all managed through Git using a GitOps approach.
+Every tool used here is industry-standard. You will find Vagrant, Ansible, Kubernetes.
 
 **What you will see at the end:**
 Open a browser and go to `http://web.local` — a web page served from inside a real
@@ -9,19 +10,9 @@ Kubernetes cluster running on your laptop.
 
 ---
 
-## What is this project and why does it exist?
-
-This project is a Senior DevOps interview task. The goal is to demonstrate how modern
-infrastructure is built, deployed, and managed in a professional environment.
-
-Every tool used here is industry-standard. You will find Vagrant, Ansible, Kubernetes,
-and Argo CD in real companies every day.
-
----
-
 ## Requirements and deliverables
 
-### 4 requirements (all met)
+### Requirements
 
 | # | Requirement | Implemented by |
 |---|-------------|---------------|
@@ -30,7 +21,7 @@ and Argo CD in real companies every day.
 | 3 | Deploy a simple web application (single HTML page, Nginx) | `kubernetes/apps/web/` — Nginx + ConfigMap + Service + Ingress |
 | 4 | Use a GitOps tool (Argo CD / Flux) — Git repo reflects cluster state | `kubernetes/argocd/web-application.yaml` — Argo CD auto-syncs on every merge |
 
-### 5 deliverables (all present)
+### Deliverables
 
 | Deliverable | File(s) |
 |-------------|---------|
@@ -39,168 +30,6 @@ and Argo CD in real companies every day.
 | Kubernetes manifests | `kubernetes/apps/web/` (namespace, configmap, deployment, service, ingress) |
 | GitOps configuration | `kubernetes/argocd/web-application.yaml` |
 | Documentation | `README.md` (this file) |
-
-### 4 evaluation criteria
-
-| Criterion | How this project meets it |
-|-----------|--------------------------|
-| **Correctness** | All components work together end-to-end: `make up && make setup && make bootstrap` → `http://web.local` shows the page |
-| **Efficiency** | K3s (lightweight Kubernetes), resource limits on pods, non-root Nginx, idempotent Ansible tasks |
-| **Clarity** | Every file has comments explaining what it does and why; README covers every step |
-| **Scalability** | Adding a worker node = one new entry in `NODES` (Vagrantfile) and `inventory.ini`; see [Scaling the cluster](#scaling-the-cluster) |
-
----
-
-## ELI5 — Explain it like I am 6 years old
-
-This section explains every tool as simply as possible.
-If you already know a tool, skip its section.
-
-### What is VirtualBox?
-
-Imagine you have a real computer (your MacBook or laptop).
-VirtualBox lets you create **fake computers inside your real computer** — like running
-a computer simulation. Each fake computer acts like a real one: it has its own operating
-system, files, and network. You can start it, stop it, and delete it.
-
-In this project we create **three fake computers** to simulate a real server environment.
-
-### What is Vagrant?
-
-Creating fake computers in VirtualBox by clicking buttons is slow and error-prone.
-**Vagrant is a recipe book for VirtualBox.** You write a file called `Vagrantfile`
-that says: *"create three computers with Ubuntu, each with 2GB RAM and a fixed IP address."*
-Then you run `vagrant up` and Vagrant reads the recipe and does everything automatically.
-
-This means anyone can recreate the exact same environment on any laptop just by running
-one command.
-
-### What is Ansible?
-
-After Vagrant creates the fake computers, they are empty — just a fresh Ubuntu install.
-**Ansible is a remote control for computers.** You write a list of tasks in a YAML file
-(called a *playbook*) like: *"install curl, disable swap, install Kubernetes"*, and Ansible
-connects to all three computers over SSH and runs those tasks automatically.
-
-No need to log in to each computer and type commands manually.
-
-### What is Kubernetes?
-
-Imagine you have an app and you want to run it. You could just start it on one server — but
-what if that server crashes? Your app is down. What if millions of people visit at once?
-One server is not enough.
-
-**Kubernetes is a manager for your apps.** It:
-- Runs multiple copies of your app (so if one crashes, others keep working)
-- Restarts crashed apps automatically
-- Spreads traffic across copies
-- Lets you update apps without downtime
-
-Instead of telling Kubernetes *"do this"*, you tell it *"I want 2 copies of my app running"*.
-Kubernetes figures out how to make that happen and keeps it that way.
-
-### What is K3s?
-
-The full version of Kubernetes is powerful but needs a lot of computer resources.
-**K3s is a lightweight Kubernetes** — it does the same job but uses much less RAM and CPU.
-It is made for local labs, small servers, and edge devices.
-
-In this project we use K3s because our fake computers only have 2GB RAM each.
-K3s is a certified Kubernetes distribution — everything you learn on K3s works on full Kubernetes.
-
-### What is Argo CD?
-
-You have Kubernetes running. How do you deploy your app?
-One way: run `kubectl apply -f app.yaml` manually every time you change something.
-This is error-prone — what if you forget? What if someone else changed the cluster directly?
-
-**Argo CD is a robot that watches your Git repository.** When something in the
-`kubernetes/apps/web/` folder changes on the `main` branch, Argo CD automatically
-applies those changes to the cluster. The cluster always reflects what is in Git.
-
-You never deploy manually. You push to Git, Argo CD does the rest.
-
-### What is GitOps?
-
-**GitOps is a way of working where Git is the only source of truth.**
-
-Traditional approach:
-- Developer runs `kubectl apply` → cluster changes
-- Nobody knows what changed, or who did it, or when
-
-GitOps approach:
-- Developer commits to Git → Argo CD detects the change → cluster updates
-- Full history in Git, code review before changes, automatic sync
-
-The cluster should always look exactly like what is in the Git repository.
-If someone changes the cluster directly (without Git), Argo CD resets it back.
-
-### What is Traefik?
-
-When a request comes to your cluster from a browser, something needs to decide:
-*"which app should receive this request?"*
-
-**Traefik is a reverse proxy and traffic router.** It reads the hostname of the request
-(`web.local`) and forwards it to the correct Kubernetes Service.
-
-K3s includes Traefik by default — you do not need to install it separately.
-
-### What is an Ingress?
-
-An **Ingress is a routing rule** that tells Traefik what to do with incoming requests.
-In this project the Ingress says: *"requests with hostname `web.local` → send to Service `web`"*.
-
-### What is a ConfigMap?
-
-A **ConfigMap is a storage box for plain text** inside Kubernetes.
-In this project it stores the `index.html` file content. The Nginx pods mount it as a file.
-
-This means you can change the web page by editing the ConfigMap in Git —
-no need to rebuild a Docker image.
-
-### What is a Deployment?
-
-A **Deployment is the instruction for running your app.** It says:
-*"run 2 copies of this Nginx container, restart them if they crash, here is the Docker image to use."*
-
-Kubernetes reads the Deployment and makes it happen.
-
-### What is a Service?
-
-Pods (containers) have temporary IP addresses — they can change when pods restart.
-A **Service is a permanent, stable address** inside the cluster.
-Other things inside the cluster can always reach your app via the Service name, even if pods restart.
-
-### What is a Namespace?
-
-A **Namespace is a folder inside Kubernetes** to keep things organized.
-All web app resources live in the `web` namespace.
-Argo CD lives in the `argocd` namespace.
-System components live in `kube-system`.
-
-### What is GitHub Actions?
-
-**GitHub Actions are robots that wake up when you push code or open a Pull Request.**
-You write a YAML file in `.github/workflows/` that says what to do.
-
-In this project the robots:
-- Validate your YAML, Ansible, and Kubernetes files before merge
-- Check that commit messages follow the Conventional Commits format
-- Write a deployment summary after merge
-
-### What are Conventional Commits?
-
-**Conventional Commits is a naming rule for your commit messages.**
-Instead of writing `fixed stuff`, you write `fix(ingress): correct hostname typo`.
-
-The format is: `type(optional-scope): short description`
-
-This makes the Git history readable, searchable, and can be used to generate changelogs.
-
-### What is CODEOWNERS?
-
-**CODEOWNERS is a file that says who must approve Pull Requests.**
-In this project `@viliwilli` must review and approve every change before it can be merged to `main`.
 
 ---
 
@@ -245,7 +74,7 @@ Browser (http://web.local)
 
 ---
 
-## Repository structure
+## 🧬 Repository structure
 
 ```text
 .
@@ -297,7 +126,7 @@ Browser (http://web.local)
 
 ## Prerequisites
 
-### macOS (Intel or Apple Silicon)
+###  macOS (Intel or Apple Silicon)
 
 ```bash
 # Install Homebrew if you do not have it
@@ -317,7 +146,7 @@ On **Apple Silicon only** — run this VirtualBox workaround once before startin
 VBoxManage setextradata global "VBoxInternal/Devices/pcbios/0/Config/DebugLevel"
 ```
 
-### Linux (Ubuntu / Debian)
+### 🐧 Linux (Ubuntu / Debian)
 
 ```bash
 # Ansible
@@ -340,7 +169,7 @@ sudo dpkg -i /tmp/vagrant.deb
 sudo apt install -y virtualbox
 ```
 
-### Windows (via WSL)
+### 🪟 Windows (via WSL)
 
 Ansible does not run natively on Windows. Use **WSL** (Windows Subsystem for Linux):
 
@@ -373,7 +202,7 @@ argocd version --client
 
 ---
 
-## Quick start (using Make)
+## 🎬 Quick start (using Make)
 
 If you want a single command flow, use `make`. All commands are one line:
 
@@ -421,7 +250,7 @@ cd task-k8s-web-project
 
 ---
 
-### Step 2: Start the virtual machines
+### 📦 Step 2: Start the virtual machines
 
 ```bash
 make up
@@ -447,7 +276,7 @@ k8s-worker-02    running
 
 ---
 
-### Step 3: Test Ansible connectivity
+### 🅰️ Step 3: Test Ansible connectivity
 
 ```bash
 make ping
@@ -484,7 +313,7 @@ This takes 5–10 minutes.
 
 ---
 
-### Step 5: Configure kubectl access
+### 🕸️ Step 5: Configure kubectl access
 
 ```bash
 make kubeconfig
@@ -673,7 +502,7 @@ The browser will show a certificate warning — this is expected for a local sel
 
 ---
 
-## GitOps workflow — how changes reach the cluster
+## 🪜 GitOps workflow — how changes reach the cluster
 
 The web application is **never deployed manually**. The flow is always through Git:
 
@@ -706,7 +535,7 @@ The web application is **never deployed manually**. The flow is always through G
 
 ---
 
-## Pull Request template
+## ❔ Pull Request template
 
 The file `.github/pull_request_template.md` is a **GitHub feature** — not a workflow.
 
@@ -725,7 +554,7 @@ before merging.
 
 ---
 
-## GitHub Actions CI/CD workflows
+## ⏏️ GitHub Actions CI/CD workflows
 
 The `.github/workflows/` directory contains three files.
 They run automatically on GitHub — you do not start them manually.
@@ -833,28 +662,12 @@ git rebase -i origin/main
 
 ---
 
-## Branch protection and CODEOWNERS
+## 🔒 Branch protection and CODEOWNERS
 
 ### Branch protection
 
 Branch protection prevents anyone from pushing directly to `main`.
 Every change must go through a Pull Request with at least one approval.
-
-**How to enable it:**
-
-1. GitHub → Settings → Branches → Add branch protection rule
-2. Branch name pattern: `main`
-3. Enable:
-   - ✅ Require a pull request before merging
-   - ✅ Require approvals — set to 1
-   - ✅ Require review from Code Owners
-   - ✅ Require status checks to pass:
-     - `YAML Syntax`
-     - `Ansible Lint`
-     - `Kubernetes Manifests`
-     - `Conventional Commits`
-   - ✅ Do not allow bypassing the above settings
-4. Save changes
 
 ### CODEOWNERS
 
@@ -869,7 +682,7 @@ file change. The "Require review from Code Owners" protection rule enforces this
 
 ---
 
-## Important networking note
+## 🕸️ Important networking note
 
 Vagrant creates **two network interfaces** inside each VM:
 
@@ -892,7 +705,7 @@ This makes multi-node pod networking work correctly.
 
 ---
 
-## Troubleshooting
+## 🚩 Troubleshooting
 
 ### `kubectl` tries to connect to `localhost:8080`
 
@@ -952,7 +765,7 @@ make hosts
 
 ---
 
-## Validation — prove the solution works
+## ✅ Validation — prove the solution works
 
 Run all of these to demonstrate a working setup:
 
@@ -968,7 +781,7 @@ make web-test                                          # HTML response from curl
 
 ---
 
-## Scaling the cluster
+## 📈 Scaling the cluster
 
 The cluster is designed to scale by adding worker nodes. No code changes are needed in
 Kubernetes manifests or Argo CD — only the VM and Ansible inventory need to be updated.
@@ -1012,7 +825,7 @@ pods across all available nodes.
 
 ---
 
-## Cleanup
+## 🧹 Cleanup
 
 ```bash
 make down        # stop VMs (keeps disks, fast to resume)
@@ -1034,7 +847,7 @@ make hosts-remove  # remove web.local from /etc/hosts
 
 ---
 
-## Summary
+## 🏁 Summary
 
 This project demonstrates a complete local DevOps pipeline:
 
@@ -1047,6 +860,3 @@ kubernetes/apps/web/ → the desired state of the web application
 http://web.local     → the running result in your browser
 GitHub Actions       → validates every change before it reaches main
 ```
-
-The key principle: **Git is the single source of truth.**
-No manual `kubectl apply`. No manual deploys. Everything goes through a Pull Request.
